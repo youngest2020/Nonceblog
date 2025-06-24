@@ -1,8 +1,10 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import BlogHeader from "@/components/BlogHeader";
-import { blogStore, categories } from "@/lib/blogStore";
+import EnhancedPostEditor from "@/components/EnhancedPostEditor";
+import { useAdminBlogPosts } from "@/hooks/useBlogPosts";
+import { uploadBlogImage } from "@/lib/imageUpload";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,87 +14,178 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, Image } from "lucide-react";
 
+const categories = [
+  "Technology",
+  "News", 
+  "Business",
+  "Health",
+  "Sports",
+  "Entertainment",
+  "Science",
+  "Politics",
+  "Travel",
+  "Lifestyle"
+];
+
+interface MediaItem {
+  id: string;
+  type: 'image' | 'video';
+  url: string;
+  caption?: string;
+  paragraphText?: string;
+}
+
 const EditPost = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
+  const { user, profile } = useAuth();
+  const { updatePost, getPostById, deletePost } = useAdminBlogPosts();
   
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     title: "",
     content: "",
     excerpt: "",
-    author: "",
     category: "",
     tags: "",
-    imageUrl: "",
-    published: false
+    image_url: "",
+    is_published: false,
+    social_handles: {
+      twitter: "",
+      youtube: "",
+      facebook: "",
+      telegram: ""
+    }
   });
 
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      const post = blogStore.getPostById(id);
-      if (post) {
-        setFormData({
-          title: post.title,
-          content: post.content,
-          excerpt: post.excerpt,
-          author: post.author,
-          category: post.category,
-          tags: post.tags.join(", "),
-          imageUrl: post.imageUrl,
-          published: post.published
-        });
-      } else {
+    const fetchPost = async () => {
+      if (!id) {
         toast({
           title: "Error",
-          description: "Post not found.",
+          description: "No post ID provided.",
           variant: "destructive",
         });
         navigate("/admin");
+        return;
       }
-    }
-  }, [id, navigate, toast]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+      try {
+        console.log('Fetching post for editing:', id);
+        const post = await getPostById(id);
+        
+        if (!post) {
+          toast({
+            title: "Error",
+            description: "Post not found.",
+            variant: "destructive",
+          });
+          navigate("/admin");
+          return;
+        }
+
+        console.log('Post fetched for editing:', post);
+        
+        // Populate form with existing post data
+        setFormData({
+          title: post.title,
+          content: post.content || "",
+          excerpt: post.excerpt || "",
+          category: post.category || "",
+          tags: post.tags ? post.tags.join(", ") : "",
+          image_url: post.image_url || "",
+          is_published: post.is_published || false,
+          social_handles: {
+            twitter: post.social_handles?.twitter || "",
+            youtube: post.social_handles?.youtube || "",
+            facebook: post.social_handles?.facebook || "",
+            telegram: post.social_handles?.telegram || ""
+          }
+        });
+
+        // Set media items if they exist
+        if (post.media_items && Array.isArray(post.media_items)) {
+          setMediaItems(post.media_items);
+        }
+
+      } catch (error) {
+        console.error('Error fetching post:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load post for editing.",
+          variant: "destructive",
+        });
+        navigate("/admin");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPost();
+  }, [id, getPostById, navigate, toast]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.title || !formData.content || !formData.author) {
+    if (!formData.title || !formData.content) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields.",
+        description: "Please fill in title and content.",
         variant: "destructive",
       });
       return;
     }
 
-    if (id) {
+    if (!user || !profile || !id) {
+      toast({
+        title: "Error",
+        description: "Missing required information to update post.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
       const updates = {
-        ...formData,
+        title: formData.title,
+        content: formData.content,
+        excerpt: formData.excerpt || formData.content.substring(0, 200) + "...",
+        category: formData.category || "General",
         tags: formData.tags.split(",").map(tag => tag.trim()).filter(Boolean),
-        excerpt: formData.excerpt || formData.content.substring(0, 200) + "..."
+        image_url: formData.image_url,
+        is_published: formData.is_published,
+        social_handles: Object.fromEntries(
+          Object.entries(formData.social_handles).filter(([_, value]) => value.trim() !== "")
+        ),
+        media_items: mediaItems
       };
 
-      blogStore.updatePost(id, updates);
-      
-      toast({
-        title: "Success",
-        description: "Blog post updated successfully!",
-      });
-      
+      await updatePost(id, updates);
       navigate("/admin");
+    } catch (error) {
+      // Error is already handled in the updatePost function
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleDelete = () => {
-    if (id && window.confirm("Are you sure you want to delete this post?")) {
-      blogStore.deletePost(id);
-      toast({
-        title: "Success",
-        description: "Blog post deleted successfully!",
-      });
-      navigate("/admin");
+  const handleDelete = async () => {
+    if (!id) return;
+    
+    if (window.confirm("Are you sure you want to delete this post? This action cannot be undone.")) {
+      try {
+        await deletePost(id);
+        navigate("/admin");
+      } catch (error) {
+        // Error is already handled in the deletePost function
+      }
     }
   };
 
@@ -100,37 +193,50 @@ const EditPost = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleSocialChange = (platform: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      social_handles: {
+        ...prev.social_handles,
+        [platform]: value
+      }
+    }));
+  };
+
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Error",
-        description: "Please select an image file.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsUploading(true);
     try {
-      const imageUrl = await blogStore.uploadImage(file);
-      setFormData(prev => ({ ...prev, imageUrl }));
+      const imageUrl = await uploadBlogImage(file);
+      setFormData(prev => ({ ...prev, image_url: imageUrl }));
       toast({
         title: "Success",
         description: "Image uploaded successfully!",
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to upload image.",
+        description: error.message || "Failed to upload image.",
         variant: "destructive",
       });
     } finally {
       setIsUploading(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <BlogHeader />
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading post...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -161,19 +267,6 @@ const EditPost = () => {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="author">Author *</Label>
-                  <Input
-                    id="author"
-                    value={formData.author}
-                    onChange={(e) => handleChange("author", e.target.value)}
-                    placeholder="Author name"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
                   <Label htmlFor="category">Category</Label>
                   <select
                     id="category"
@@ -187,33 +280,33 @@ const EditPost = () => {
                     ))}
                   </select>
                 </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="tags">Tags</Label>
-                  <Input
-                    id="tags"
-                    value={formData.tags}
-                    onChange={(e) => handleChange("tags", e.target.value)}
-                    placeholder="Separate tags with commas"
-                  />
-                </div>
               </div>
 
-              {/* Image Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="tags">Tags</Label>
+                <Input
+                  id="tags"
+                  value={formData.tags}
+                  onChange={(e) => handleChange("tags", e.target.value)}
+                  placeholder="Separate tags with commas"
+                />
+              </div>
+
+              {/* Featured Image Upload */}
               <div className="space-y-2">
                 <Label>Featured Image</Label>
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
-                  {formData.imageUrl ? (
+                  {formData.image_url ? (
                     <div className="space-y-4">
                       <img 
-                        src={formData.imageUrl} 
+                        src={formData.image_url} 
                         alt="Preview" 
                         className="w-full h-48 object-cover rounded-lg"
                       />
                       <Button 
                         type="button" 
                         variant="outline" 
-                        onClick={() => setFormData(prev => ({ ...prev, imageUrl: "" }))}
+                        onClick={() => setFormData(prev => ({ ...prev, image_url: "" }))}
                       >
                         Remove Image
                       </Button>
@@ -250,6 +343,33 @@ const EditPost = () => {
                 </div>
               </div>
 
+              {/* Social Media Handles */}
+              <div className="space-y-4">
+                <Label>Social Media Handles (Optional)</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    placeholder="X (Twitter) handle"
+                    value={formData.social_handles.twitter}
+                    onChange={(e) => handleSocialChange("twitter", e.target.value)}
+                  />
+                  <Input
+                    placeholder="YouTube channel"
+                    value={formData.social_handles.youtube}
+                    onChange={(e) => handleSocialChange("youtube", e.target.value)}
+                  />
+                  <Input
+                    placeholder="Facebook profile"
+                    value={formData.social_handles.facebook}
+                    onChange={(e) => handleSocialChange("facebook", e.target.value)}
+                  />
+                  <Input
+                    placeholder="Telegram username"
+                    value={formData.social_handles.telegram}
+                    onChange={(e) => handleSocialChange("telegram", e.target.value)}
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="excerpt">Excerpt</Label>
                 <Textarea
@@ -261,35 +381,32 @@ const EditPost = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="content">Content *</Label>
-                <Textarea
-                  id="content"
-                  value={formData.content}
-                  onChange={(e) => handleChange("content", e.target.value)}
-                  placeholder="Write your post content here..."
-                  rows={15}
-                  required
-                />
-              </div>
+              {/* Enhanced Post Editor */}
+              <EnhancedPostEditor
+                content={formData.content}
+                mediaItems={mediaItems}
+                onContentChange={(content) => handleChange("content", content)}
+                onMediaChange={setMediaItems}
+              />
 
               <div className="flex items-center space-x-2">
                 <Switch
                   id="published"
-                  checked={formData.published}
-                  onCheckedChange={(checked) => handleChange("published", checked)}
+                  checked={formData.is_published}
+                  onCheckedChange={(checked) => handleChange("is_published", checked)}
                 />
                 <Label htmlFor="published">Published</Label>
               </div>
 
               <div className="flex gap-4 pt-4">
-                <Button type="submit">
-                  Update Post
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Updating..." : "Update Post"}
                 </Button>
                 <Button 
                   type="button" 
                   variant="outline" 
                   onClick={() => navigate("/admin")}
+                  disabled={isSubmitting}
                 >
                   Cancel
                 </Button>
@@ -297,6 +414,7 @@ const EditPost = () => {
                   type="button" 
                   variant="destructive" 
                   onClick={handleDelete}
+                  disabled={isSubmitting}
                 >
                   Delete Post
                 </Button>
