@@ -78,8 +78,7 @@ export const runStorageDiagnostic = async () => {
         success: false, 
         error: 'blog-images bucket not found',
         availableBuckets: buckets?.map(b => ({ id: b.id, name: b.name, public: b.public })),
-        similarBuckets: similarBuckets?.map(b => ({ id: b.id, name: b.name, public: b.public })),
-        canCreateBucket: true
+        similarBuckets: similarBuckets?.map(b => ({ id: b.id, name: b.name, public: b.public }))
       };
     }
     
@@ -212,65 +211,19 @@ export const createBlogImagesBucket = async () => {
   console.log('=== CREATING BLOG-IMAGES BUCKET ===');
   
   try {
-    // First check if bucket already exists
-    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-    if (!listError && buckets?.find(b => b.id === 'blog-images')) {
-      console.log('✅ blog-images bucket already exists');
-      return { success: true, message: 'Bucket already exists', alreadyExists: true };
-    }
-
-    // Create the bucket with proper configuration
     const { data, error } = await supabase.storage.createBucket('blog-images', {
       public: true,
-      allowedMimeTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'],
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'],
       fileSizeLimit: 10485760 // 10MB
     });
 
     if (error) {
       console.error('❌ Failed to create bucket:', error);
-      
-      // Handle specific error cases
-      if (error.message.includes('already exists')) {
-        console.log('✅ Bucket already exists (from error message)');
-        return { success: true, message: 'Bucket already exists', alreadyExists: true };
-      }
-      
-      if (error.message.includes('permission')) {
-        return { 
-          success: false, 
-          error: 'Permission denied. You may need admin privileges to create storage buckets.',
-          details: error,
-          suggestion: 'Contact your Supabase project administrator to create the bucket or grant you storage admin permissions.'
-        };
-      }
-      
       return { success: false, error: error.message, details: error };
     }
 
     console.log('✅ Bucket created successfully:', data);
-    
-    // Wait a moment for the bucket to be fully initialized
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Verify the bucket was created and is accessible
-    const verifyResult = await runStorageDiagnostic();
-    if (verifyResult.success) {
-      return { 
-        success: true, 
-        message: 'Bucket created and verified successfully',
-        data,
-        verified: true
-      };
-    } else {
-      return {
-        success: true,
-        message: 'Bucket created but verification failed',
-        data,
-        verified: false,
-        verificationError: verifyResult.error
-      };
-    }
-
+    return { success: true, data };
   } catch (error: any) {
     console.error('❌ Unexpected error creating bucket:', error);
     return { success: false, error: error.message, details: error };
@@ -325,46 +278,6 @@ export const fixStoragePermissions = async () => {
     return { success: true, tests };
 
   } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-};
-
-// Auto-create bucket function that can be called from upload functions
-export const ensureBlogImagesBucket = async () => {
-  console.log('=== ENSURING BLOG-IMAGES BUCKET EXISTS ===');
-  
-  try {
-    // Check if bucket exists
-    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-    if (listError) {
-      console.error('❌ Cannot list buckets:', listError);
-      return { success: false, error: `Cannot access storage: ${listError.message}` };
-    }
-
-    const blogImagesBucket = buckets?.find(b => b.id === 'blog-images');
-    if (blogImagesBucket) {
-      console.log('✅ blog-images bucket already exists');
-      return { success: true, exists: true };
-    }
-
-    // Try to create the bucket
-    console.log('🔧 blog-images bucket not found, attempting to create...');
-    const createResult = await createBlogImagesBucket();
-    
-    if (createResult.success) {
-      console.log('✅ blog-images bucket created successfully');
-      return { success: true, created: true };
-    } else {
-      console.error('❌ Failed to create bucket:', createResult.error);
-      return { 
-        success: false, 
-        error: `Failed to create bucket: ${createResult.error}`,
-        details: createResult
-      };
-    }
-
-  } catch (error: any) {
-    console.error('❌ Unexpected error ensuring bucket:', error);
     return { success: false, error: error.message };
   }
 };
