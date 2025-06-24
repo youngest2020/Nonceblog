@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import BlogHeader from "@/components/BlogHeader";
 import EnhancedPostEditor from "@/components/EnhancedPostEditor";
 import { useAdminBlogPosts } from "@/hooks/useBlogPosts";
-import { uploadBlogImage } from "@/lib/imageUpload";
+import { uploadBlogImage, debugStorageSetup } from "@/lib/imageUpload";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Image } from "lucide-react";
+import { Upload, Image, AlertTriangle } from "lucide-react";
 
 const categories = [
   "Technology",
@@ -85,8 +85,15 @@ const CreatePost = () => {
     setIsSubmitting(true);
 
     try {
+      // Generate slug from title
+      const slug = formData.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
       const postData = {
         title: formData.title,
+        slug: slug,
         content: formData.content,
         excerpt: formData.excerpt || formData.content.substring(0, 200) + "...",
         author_name: profile.display_name || profile.email || "Unknown Author",
@@ -95,6 +102,7 @@ const CreatePost = () => {
         tags: formData.tags.split(",").map(tag => tag.trim()).filter(Boolean),
         image_url: formData.image_url,
         is_published: formData.is_published,
+        published_at: formData.is_published ? new Date().toISOString() : null,
         social_handles: Object.fromEntries(
           Object.entries(formData.social_handles).filter(([_, value]) => value.trim() !== "")
         ),
@@ -128,23 +136,36 @@ const CreatePost = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Reset the input value so the same file can be selected again
+    event.target.value = '';
+
     setIsUploading(true);
     try {
+      console.log('Starting featured image upload...');
       const imageUrl = await uploadBlogImage(file);
       setFormData(prev => ({ ...prev, image_url: imageUrl }));
       toast({
         title: "Success",
-        description: "Image uploaded successfully!",
+        description: "Featured image uploaded successfully!",
       });
     } catch (error: any) {
+      console.error('Featured image upload failed:', error);
       toast({
-        title: "Error",
-        description: error.message || "Failed to upload image.",
+        title: "Upload Failed",
+        description: error.message || "Failed to upload image. Please try again.",
         variant: "destructive",
       });
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleDebugStorage = async () => {
+    await debugStorageSetup();
+    toast({
+      title: "Debug Complete",
+      description: "Check the browser console for storage debug information.",
+    });
   };
 
   return (
@@ -155,6 +176,27 @@ const CreatePost = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Post</h1>
           <p className="text-gray-600">Write and publish your blog post</p>
+          
+          {/* Debug button for development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <span className="text-sm font-medium text-yellow-800">Debug Tools</span>
+              </div>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={handleDebugStorage}
+              >
+                Debug Storage Setup
+              </Button>
+              <p className="text-xs text-yellow-700 mt-1">
+                Click to check storage bucket configuration and permissions
+              </p>
+            </div>
+          )}
         </div>
 
         <Card>
@@ -244,9 +286,18 @@ const CreatePost = () => {
                           accept="image/*"
                           className="hidden"
                           onChange={handleImageUpload}
+                          disabled={isUploading}
                         />
                       </div>
                       <p className="text-sm text-gray-500 mt-2">PNG, JPG, GIF up to 10MB</p>
+                      
+                      {/* Upload Status */}
+                      {isUploading && (
+                        <div className="flex items-center justify-center gap-2 text-blue-600 mt-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          <span className="text-sm">Uploading...</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
