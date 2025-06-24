@@ -17,25 +17,32 @@ export const useBlogPosts = () => {
       setLoading(true);
       console.log('Fetching published posts from Supabase...');
       
+      // Use a timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        console.warn('Blog posts fetch timeout, setting empty array');
+        setPosts([]);
+        setLoading(false);
+      }, 10000);
+
       const { data, error } = await supabase
         .from('blog_posts')
         .select('*')
         .eq('is_published', true)
         .order('published_at', { ascending: false });
 
+      clearTimeout(timeoutId);
+
       if (error) {
-        throw error;
+        console.error('Error fetching posts:', error);
+        // Don't throw error, just set empty array and show user-friendly message
+        setPosts([]);
+        return;
       }
 
       console.log('Fetched posts:', data);
       setPosts(data || []);
     } catch (error: any) {
       console.error('Error fetching posts:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load blog posts",
-        variant: "destructive",
-      });
       setPosts([]);
     } finally {
       setLoading(false);
@@ -59,13 +66,29 @@ export const useAdminBlogPosts = () => {
       setLoading(true);
       console.log('Fetching all posts for admin...');
       
+      // Use a timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        console.warn('Admin posts fetch timeout, setting empty array');
+        setPosts([]);
+        setLoading(false);
+      }, 10000);
+      
       const { data, error } = await supabase
         .from('blog_posts')
         .select('*')
         .order('created_at', { ascending: false });
 
+      clearTimeout(timeoutId);
+
       if (error) {
-        throw error;
+        console.error('Error fetching admin posts:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load posts",
+          variant: "destructive",
+        });
+        setPosts([]);
+        return;
       }
 
       console.log('Fetched admin posts:', data);

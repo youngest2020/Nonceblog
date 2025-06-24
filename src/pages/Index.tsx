@@ -22,6 +22,7 @@ const Index = () => {
     return matchesSearch && matchesCategory;
   });
 
+  // Show loading with timeout protection
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -29,6 +30,7 @@ const Index = () => {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading posts...</p>
+          <p className="mt-2 text-sm text-gray-500">If this takes too long, there might be a database connection issue.</p>
         </div>
       </div>
     );
