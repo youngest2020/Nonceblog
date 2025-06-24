@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, Image, Video, X, Link } from "lucide-react";
-import { blogStore } from "@/lib/blogStore";
+import { uploadBlogImage } from "@/lib/imageUpload";
 
 interface MediaItem {
   id: string;
@@ -33,18 +33,9 @@ const EnhancedPostEditor = ({ content, mediaItems, onContentChange, onMediaChang
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Error",
-        description: "Please select an image file.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsUploading(true);
     try {
-      const imageUrl = await blogStore.uploadImage(file);
+      const imageUrl = await uploadBlogImage(file);
       const newMediaItem: MediaItem = {
         id: Date.now().toString(),
         type: 'image',
@@ -57,10 +48,10 @@ const EnhancedPostEditor = ({ content, mediaItems, onContentChange, onMediaChang
         title: "Success",
         description: "Image uploaded successfully!",
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to upload image.",
+        description: error.message || "Failed to upload image.",
         variant: "destructive",
       });
     } finally {
