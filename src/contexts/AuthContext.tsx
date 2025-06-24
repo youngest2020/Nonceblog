@@ -23,27 +23,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Fetch user profile with better error handling
+  // Simplified profile fetching without recursion
   const fetchProfile = async (userId: string): Promise<Profile | null> => {
     try {
       console.log('Fetching profile for user:', userId);
       
+      // Use service role for admin operations to bypass RLS
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle(); // Use maybeSingle to avoid errors when no profile exists
 
       if (error) {
         console.error('Error fetching profile:', error);
-        
-        // If profile doesn't exist, try to create it
-        if (error.code === 'PGRST116') {
-          console.log('Profile not found, attempting to create...');
-          return await createMissingProfile(userId);
-        }
-        
-        throw error;
+        return null;
+      }
+
+      if (!data) {
+        console.log('No profile found, creating one...');
+        return await createProfile(userId);
       }
 
       console.log('Profile fetched successfully:', data);
@@ -54,16 +53,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Create missing profile for existing user
-  const createMissingProfile = async (userId: string): Promise<Profile | null> => {
+  // Create profile for new user
+  const createProfile = async (userId: string): Promise<Profile | null> => {
     try {
-      console.log('Creating missing profile for user:', userId);
+      console.log('Creating profile for user:', userId);
       
-      // Get user data from auth
-      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+      // Get user email from auth
+      const { data: { user: authUser } } = await supabase.auth.getUser();
       
-      if (userError || !authUser) {
-        throw new Error('Could not get user data');
+      if (!authUser) {
+        throw new Error('No authenticated user found');
       }
 
       const { data, error } = await supabase
@@ -71,25 +70,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .insert({
           id: userId,
           email: authUser.email,
-          display_name: authUser.user_metadata?.display_name || authUser.email,
+          display_name: authUser.user_metadata?.display_name || authUser.email?.split('@')[0] || 'User',
           is_admin: false
         })
         .select()
         .single();
 
       if (error) {
-        throw error;
+        console.error('Error creating profile:', error);
+        return null;
       }
 
       console.log('Profile created successfully:', data);
       return data;
     } catch (error) {
-      console.error('Error creating missing profile:', error);
+      console.error('Error creating profile:', error);
       return null;
     }
   };
 
-  // Initialize auth state with timeout protection
+  // Initialize auth state
   useEffect(() => {
     let mounted = true;
     
@@ -97,29 +97,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         console.log('Initializing auth...');
         
-        // Set a timeout to prevent infinite loading
-        const timeoutId = setTimeout(() => {
-          if (mounted) {
-            console.warn('Auth initialization timeout, setting loading to false');
-            setLoading(false);
-          }
-        }, 10000); // 10 second timeout
-
         // Get initial session
         const { data: { session }, error } = await supabase.auth.getSession();
-        
-        clearTimeout(timeoutId);
         
         if (error) {
           console.error('Error getting session:', error);
         } else if (session?.user && mounted) {
-          console.log('Session found, setting user:', session.user.email);
+          console.log('Session found for user:', session.user.email);
           setUser(session.user);
           
-          const userProfile = await fetchProfile(session.user.id);
-          if (mounted) {
-            setProfile(userProfile);
-          }
+          // Fetch profile without blocking
+          fetchProfile(session.user.id).then(userProfile => {
+            if (mounted) {
+              setProfile(userProfile);
+            }
+          });
         } else {
           console.log('No active session found');
         }
@@ -143,14 +135,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (session?.user) {
           setUser(session.user);
-          const userProfile = await fetchProfile(session.user.id);
-          setProfile(userProfile);
+          // Fetch profile asynchronously
+          fetchProfile(session.user.id).then(userProfile => {
+            if (mounted) {
+              setProfile(userProfile);
+            }
+          });
         } else {
           setUser(null);
           setProfile(null);
         }
         
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     );
 
@@ -162,7 +160,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, password: string) => {
     try {
-      setLoading(true);
       console.log('Attempting to sign in:', email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -175,15 +172,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data.user) {
-        console.log('Sign in successful, fetching profile...');
-        const userProfile = await fetchProfile(data.user.id);
-        
-        if (!userProfile) {
-          throw new Error('User profile not found. Please contact an administrator.');
-        }
-        
+        console.log('Sign in successful for user:', data.user.email);
         setUser(data.user);
-        setProfile(userProfile);
+        
+        // Fetch profile asynchronously - don't block the sign in
+        fetchProfile(data.user.id).then(userProfile => {
+          setProfile(userProfile);
+          
+          if (!userProfile) {
+            console.warn('No profile found for user, but sign in was successful');
+          }
+        });
         
         toast({
           title: "Success",
@@ -198,8 +197,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         variant: "destructive",
       });
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 

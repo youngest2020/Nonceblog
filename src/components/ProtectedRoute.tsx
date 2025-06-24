@@ -14,7 +14,13 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
   useEffect(() => {
     // Only redirect when we're not loading and have determined auth state
     if (!loading) {
-      console.log('ProtectedRoute check:', { user: !!user, profile: !!profile, isAdmin: profile?.is_admin, requireAdmin });
+      console.log('ProtectedRoute check:', { 
+        user: !!user, 
+        profile: !!profile, 
+        isAdmin: profile?.is_admin, 
+        requireAdmin,
+        userEmail: user?.email 
+      });
       
       if (!user) {
         console.log('No user found, redirecting to secure-admin');
@@ -22,10 +28,18 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
         return;
       }
 
-      if (requireAdmin && (!profile || !profile.is_admin)) {
-        console.log('Admin required but user is not admin, redirecting to secure-admin');
-        navigate('/secure-admin', { replace: true });
-        return;
+      // For admin routes, we need to check if profile exists and has admin privileges
+      if (requireAdmin) {
+        if (!profile) {
+          console.log('Profile not loaded yet, waiting...');
+          return; // Wait for profile to load
+        }
+        
+        if (!profile.is_admin) {
+          console.log('User is not admin, redirecting to secure-admin');
+          navigate('/secure-admin', { replace: true });
+          return;
+        }
       }
     }
   }, [user, profile, loading, navigate, requireAdmin]);
@@ -37,6 +51,18 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Authenticating...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading while profile is being fetched for admin routes
+  if (requireAdmin && user && !profile) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading profile...</p>
         </div>
       </div>
     );
