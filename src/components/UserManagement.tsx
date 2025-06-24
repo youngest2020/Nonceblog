@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,10 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { UserPlus, Trash2, Mail, Eye, EyeOff, Copy } from "lucide-react";
+import { mockAdminProfile } from "@/lib/mockData";
 
-interface DatabaseUser {
+interface MockUser {
   id: string;
   email: string | null;
   display_name: string | null;
@@ -20,7 +19,7 @@ interface DatabaseUser {
 
 const UserManagement = () => {
   const { toast } = useToast();
-  const [users, setUsers] = useState<DatabaseUser[]>([]);
+  const [users, setUsers] = useState<MockUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserName, setNewUserName] = useState("");
@@ -28,27 +27,32 @@ const UserManagement = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isAddingUser, setIsAddingUser] = useState(false);
 
-  // Fetch users from database
+  // Mock users data
+  const mockUsers: MockUser[] = [
+    {
+      id: mockAdminProfile.id,
+      email: mockAdminProfile.email,
+      display_name: mockAdminProfile.display_name,
+      profile_picture: mockAdminProfile.profile_picture,
+      is_admin: mockAdminProfile.is_admin,
+      created_at: mockAdminProfile.created_at
+    }
+  ];
+
+  // Fetch users from localStorage
   const fetchUsers = async () => {
     try {
-      console.log('Fetching users from database...');
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, display_name, profile_picture, is_admin, created_at')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching users:', error);
-        throw error;
-      }
-
-      console.log('Users fetched successfully:', data);
-      setUsers(data || []);
+      console.log('Fetching users from localStorage...');
+      const storedUsers = localStorage.getItem('users');
+      const users = storedUsers ? JSON.parse(storedUsers) : mockUsers;
+      
+      console.log('Users fetched successfully:', users);
+      setUsers(users);
     } catch (error: any) {
       console.error('Error fetching users:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch users from database",
+        description: "Failed to fetch users",
         variant: "destructive",
       });
     } finally {
@@ -88,12 +92,22 @@ const UserManagement = () => {
     }
 
     try {
-      // Create user via Supabase Auth (this would typically be done server-side)
-      // For now, we'll show a message that this needs to be implemented
+      const newUser: MockUser = {
+        id: Date.now().toString(),
+        email: newUserEmail.trim(),
+        display_name: newUserName.trim(),
+        profile_picture: null,
+        is_admin: false,
+        created_at: new Date().toISOString()
+      };
+
+      const updatedUsers = [...users, newUser];
+      localStorage.setItem('users', JSON.stringify(updatedUsers));
+      setUsers(updatedUsers);
+
       toast({
-        title: "Info", 
-        description: "User creation needs to be implemented via Supabase Auth API",
-        variant: "default",
+        title: "Success", 
+        description: `User ${newUserName} created successfully! (Mock implementation)`,
       });
       
       // Reset form
@@ -125,20 +139,13 @@ const UserManagement = () => {
 
     if (window.confirm(`Are you sure you want to delete user ${user.display_name}?`)) {
       try {
-        // Delete user from profiles table
-        const { error } = await supabase
-          .from('profiles')
-          .delete()
-          .eq('id', userId);
-
-        if (error) throw error;
-
-        // Refresh users list
-        await fetchUsers();
+        const updatedUsers = users.filter(u => u.id !== userId);
+        localStorage.setItem('users', JSON.stringify(updatedUsers));
+        setUsers(updatedUsers);
         
         toast({
           title: "Success",
-          description: "User deleted successfully!",
+          description: "User deleted successfully! (Mock implementation)",
         });
       } catch (error: any) {
         toast({
@@ -167,7 +174,7 @@ const UserManagement = () => {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>User Management</span>
+          <span>User Management (Mock)</span>
           <Button
             onClick={() => setIsAddingUser(true)}
             size="sm"
@@ -182,7 +189,7 @@ const UserManagement = () => {
         {/* Add User Form */}
         {isAddingUser && (
           <div className="border rounded-lg p-4 bg-gray-50">
-            <h3 className="font-medium mb-4">Add New User</h3>
+            <h3 className="font-medium mb-4">Add New User (Mock)</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -246,13 +253,13 @@ const UserManagement = () => {
                   )}
                 </div>
                 <p className="text-xs text-gray-500">
-                  Share this password with the new user. They should change it after first login.
+                  This is a mock implementation. In a real app, this would create an actual user account.
                 </p>
               </div>
             </div>
             
             <div className="flex gap-2 mt-4">
-              <Button onClick={handleAddUser}>Add User</Button>
+              <Button onClick={handleAddUser}>Add User (Mock)</Button>
               <Button 
                 variant="outline" 
                 onClick={() => {

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,6 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { User, Upload } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 
 const ProfileSettings = () => {
   const { profile, updateProfile, user } = useAuth();
@@ -66,46 +64,28 @@ const ProfileSettings = () => {
 
     setIsUploading(true);
     try {
-      console.log('Starting profile picture upload...');
+      console.log('Mock uploading profile picture...');
       
-      // Create unique filename
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `profile-pictures/${fileName}`;
-
-      // Upload file to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
+      // Mock upload - convert to data URL
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const dataUrl = e.target?.result as string;
+        
+        // Update form data with new URL
+        setFormData(prev => ({ 
+          ...prev, 
+          profile_picture: dataUrl 
+        }));
+        
+        // Immediately update the profile
+        await updateProfile({ profile_picture: dataUrl });
+        
+        toast({
+          title: "Success",
+          description: "Profile picture uploaded successfully! (Mock implementation)",
         });
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw uploadError;
-      }
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-
-      console.log('File uploaded successfully, public URL:', publicUrl);
-      
-      // Update form data with new URL
-      setFormData(prev => ({ 
-        ...prev, 
-        profile_picture: publicUrl 
-      }));
-      
-      // Immediately update the profile in the database
-      await updateProfile({ profile_picture: publicUrl });
-      
-      toast({
-        title: "Success",
-        description: "Profile picture uploaded successfully!",
-      });
+      };
+      reader.readAsDataURL(file);
     } catch (error: any) {
       console.error('Profile picture upload error:', error);
       toast({
@@ -134,7 +114,7 @@ const ProfileSettings = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Profile Settings</CardTitle>
+        <CardTitle>Profile Settings (Mock)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Profile Picture */}
@@ -167,7 +147,7 @@ const ProfileSettings = () => {
               className="hidden"
               onChange={handleProfilePictureUpload}
             />
-            <p className="text-sm text-gray-500 mt-1">JPG, PNG or GIF (max 5MB)</p>
+            <p className="text-sm text-gray-500 mt-1">JPG, PNG or GIF (max 5MB) - Mock upload</p>
           </div>
         </div>
 
@@ -207,7 +187,7 @@ const ProfileSettings = () => {
         </div>
 
         <Button onClick={handleSave} className="w-full">
-          Save Changes
+          Save Changes (Mock)
         </Button>
       </CardContent>
     </Card>

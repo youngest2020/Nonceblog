@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Lock, Shield, Eye, EyeOff } from "lucide-react";
 
 const SecureAdmin = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signIn } = useAuth();
   const [credentials, setCredentials] = useState({
     email: "",
     password: ""
@@ -24,47 +24,19 @@ const SecureAdmin = () => {
     setLoading(true);
     
     try {
-      console.log("=== LOGIN ATTEMPT ===");
+      console.log("=== MOCK LOGIN ATTEMPT ===");
       console.log("Email being used:", credentials.email);
       
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: credentials.email.trim(),
-        password: credentials.password,
-      });
-
-      if (error) {
-        console.error("Supabase auth error:", error);
-        throw new Error(error.message);
-      }
-
-      console.log("Login successful, user ID:", data.user.id);
-
-      // Check if user is admin
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', data.user.id)
-        .single();
-
-      if (profileError) {
-        console.error("Profile fetch error:", profileError);
-        throw new Error('Unable to verify admin status');
-      }
-
-      if (!profile?.is_admin) {
-        console.log("User is not admin, signing out");
-        await supabase.auth.signOut();
-        throw new Error('Access denied. Admin privileges required.');
-      }
-
-      console.log("Admin access confirmed");
+      await signIn(credentials.email.trim(), credentials.password);
+      
+      console.log("Mock login successful");
       toast({
         title: "Success",
         description: "Welcome to the admin panel!",
       });
       navigate("/admin");
     } catch (error: any) {
-      console.error("=== LOGIN ERROR ===");
+      console.error("=== MOCK LOGIN ERROR ===");
       console.error("Error message:", error.message);
       
       toast({
@@ -86,10 +58,18 @@ const SecureAdmin = () => {
               <Shield className="h-8 w-8 text-blue-600" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Admin Access</CardTitle>
-          <p className="text-gray-600">Secure login to Nonce Firewall Blogs admin panel</p>
+          <CardTitle className="text-2xl font-bold">Admin Access (Mock)</CardTitle>
+          <p className="text-gray-600">Mock login to Nonce Firewall Blogs admin panel</p>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-sm text-blue-800">
+              <strong>Mock Credentials:</strong><br />
+              Email: admin@noncefirewall.com<br />
+              Password: admin123
+            </p>
+          </div>
+          
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
@@ -136,12 +116,12 @@ const SecureAdmin = () => {
 
             <Button type="submit" className="w-full" disabled={loading}>
               <Lock className="h-4 w-4 mr-2" />
-              {loading ? "Signing In..." : "Sign In"}
+              {loading ? "Signing In..." : "Sign In (Mock)"}
             </Button>
           </form>
           
           <div className="mt-4 text-center text-sm text-gray-600">
-            <p>If you're having trouble logging in, check the browser console for detailed error information.</p>
+            <p>This is a mock authentication system. No real authentication is performed.</p>
           </div>
         </CardContent>
       </Card>

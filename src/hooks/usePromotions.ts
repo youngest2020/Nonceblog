@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 export interface Promotion {
@@ -31,23 +30,23 @@ export const usePromotions = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  const getPromotionsFromStorage = (): Promotion[] => {
+    const stored = localStorage.getItem('promotions');
+    return stored ? JSON.parse(stored) : [];
+  };
+
+  const savePromotionsToStorage = (promotions: Promotion[]) => {
+    localStorage.setItem('promotions', JSON.stringify(promotions));
+  };
+
   const fetchPromotions = async () => {
     try {
       setLoading(true);
-      console.log('Fetching promotions...');
+      console.log('Fetching promotions from localStorage...');
       
-      const { data, error } = await supabase
-        .from('promotions')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching promotions:', error);
-        throw error;
-      }
-
-      console.log('Promotions fetched successfully:', data);
-      setPromotions(data || []);
+      const storedPromotions = getPromotionsFromStorage();
+      console.log('Promotions fetched successfully:', storedPromotions);
+      setPromotions(storedPromotions);
     } catch (error: any) {
       console.error('Error fetching promotions:', error);
       toast({
@@ -63,18 +62,13 @@ export const usePromotions = () => {
 
   const getActivePromotions = async (page?: string) => {
     try {
-      let query = supabase
-        .from('promotions')
-        .select('*')
-        .eq('is_active', true);
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
+      const allPromotions = getPromotionsFromStorage();
+      
       // Filter by page and date rules on client side
       const now = new Date();
-      const filteredPromotions = (data || []).filter(promotion => {
+      const filteredPromotions = allPromotions.filter(promotion => {
+        if (!promotion.is_active) return false;
+        
         const rules = promotion.display_rules || {};
         
         // Check page filter
@@ -106,29 +100,25 @@ export const usePromotions = () => {
     try {
       console.log('Creating promotion:', promotionData);
 
-      const { data, error } = await supabase
-        .from('promotions')
-        .insert([{
-          ...promotionData,
-          analytics: { views: 0, clicks: 0, conversion_rate: 0 }
-        }])
-        .select()
-        .single();
+      const newPromotion: Promotion = {
+        id: Date.now().toString(),
+        ...promotionData,
+        analytics: { views: 0, clicks: 0, conversion_rate: 0 },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
 
-      if (error) {
-        console.error('Error creating promotion:', error);
-        throw error;
-      }
-
-      console.log('Promotion created successfully:', data);
-      setPromotions(prev => [data, ...prev]);
+      const allPromotions = getPromotionsFromStorage();
+      const updatedPromotions = [newPromotion, ...allPromotions];
+      savePromotionsToStorage(updatedPromotions);
+      setPromotions(updatedPromotions);
       
       toast({
         title: "Success",
         description: "Promotion created successfully!",
       });
 
-      return data;
+      return newPromotion;
     } catch (error: any) {
       console.error('Error creating promotion:', error);
       toast({
@@ -144,27 +134,27 @@ export const usePromotions = () => {
     try {
       console.log('Updating promotion:', id, updates);
 
-      const { data, error } = await supabase
-        .from('promotions')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error updating promotion:', error);
-        throw error;
+      const allPromotions = getPromotionsFromStorage();
+      const updatedPromotions = allPromotions.map(promotion => 
+        promotion.id === id 
+          ? { ...promotion, ...updates, updated_at: new Date().toISOString() }
+          : promotion
+      );
+      
+      const updatedPromotion = updatedPromotions.find(promotion => promotion.id === id);
+      if (!updatedPromotion) {
+        throw new Error('Promotion not found');
       }
 
-      console.log('Promotion updated successfully:', data);
-      setPromotions(prev => prev.map(promotion => promotion.id === id ? data : promotion));
+      savePromotionsToStorage(updatedPromotions);
+      setPromotions(updatedPromotions);
       
       toast({
         title: "Success",
         description: "Promotion updated successfully!",
       });
 
-      return data;
+      return updatedPromotion;
     } catch (error: any) {
       console.error('Error updating promotion:', error);
       toast({
@@ -180,18 +170,11 @@ export const usePromotions = () => {
     try {
       console.log('Deleting promotion:', id);
 
-      const { error } = await supabase
-        .from('promotions')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        console.error('Error deleting promotion:', error);
-        throw error;
-      }
-
-      console.log('Promotion deleted successfully');
-      setPromotions(prev => prev.filter(promotion => promotion.id !== id));
+      const allPromotions = getPromotionsFromStorage();
+      const updatedPromotions = allPromotions.filter(promotion => promotion.id !== id);
+      
+      savePromotionsToStorage(updatedPromotions);
+      setPromotions(updatedPromotions);
       
       toast({
         title: "Success",
@@ -210,15 +193,8 @@ export const usePromotions = () => {
 
   const trackPromotionView = async (promotionId: string, visitorId: string) => {
     try {
-      await supabase
-        .from('promotion_views')
-        .insert([{
-          promotion_id: promotionId,
-          visitor_id: visitorId,
-          viewed_at: new Date().toISOString(),
-          user_agent: navigator.userAgent,
-          referrer: document.referrer
-        }]);
+      console.log('Mock tracking promotion view:', { promotionId, visitorId });
+      // Mock implementation
     } catch (error) {
       console.error('Error tracking promotion view:', error);
     }
@@ -226,16 +202,8 @@ export const usePromotions = () => {
 
   const trackPromotionClick = async (promotionId: string, visitorId: string) => {
     try {
-      await supabase
-        .from('promotion_views')
-        .update({
-          clicked: true,
-          clicked_at: new Date().toISOString()
-        })
-        .eq('promotion_id', promotionId)
-        .eq('visitor_id', visitorId)
-        .order('viewed_at', { ascending: false })
-        .limit(1);
+      console.log('Mock tracking promotion click:', { promotionId, visitorId });
+      // Mock implementation
     } catch (error) {
       console.error('Error tracking promotion click:', error);
     }
@@ -243,27 +211,6 @@ export const usePromotions = () => {
 
   useEffect(() => {
     fetchPromotions();
-
-    // Set up real-time subscription for promotions
-    const subscription = supabase
-      .channel('promotions_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'promotions'
-        },
-        (payload) => {
-          console.log('Promotion real-time update received:', payload);
-          fetchPromotions(); // Refetch promotions when changes occur
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   return { 

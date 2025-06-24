@@ -1,158 +1,73 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { User, Session } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
+import { mockAdminUser, mockAdminProfile, localStorageHelpers, MockProfile } from '@/lib/mockData';
 
-interface Profile {
+interface User {
   id: string;
   email: string | null;
-  display_name: string | null;
-  is_admin: boolean | null;
-  bio: string | null;
-  profile_picture: string | null;
-  created_at: string | null;
-  updated_at: string | null;
+  user_metadata?: {
+    display_name?: string;
+  };
 }
 
 interface AuthContextType {
   user: User | null;
-  profile: Profile | null;
+  profile: MockProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  updateProfile: (updates: Partial<Profile>) => Promise<void>;
+  updateProfile: (updates: Partial<MockProfile>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<MockProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [initializing, setInitializing] = useState(true);
   const { toast } = useToast();
 
-  // Fetch user profile from database
-  const fetchProfile = async (userId: string) => {
-    try {
-      console.log('Fetching profile for user:', userId);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return null;
-      }
-
-      console.log('Profile fetched successfully:', data);
-      return data;
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-      return null;
-    }
-  };
-
-  // Initialize auth state
+  // Initialize auth state from localStorage
   useEffect(() => {
-    let mounted = true;
-
-    const initializeAuth = async () => {
+    const initializeAuth = () => {
       try {
-        console.log('Initializing auth...');
+        const storedUser = localStorageHelpers.getCurrentUser();
+        const storedProfile = localStorageHelpers.getProfile();
         
-        // Get initial session first
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('Error getting initial session:', error);
-        } else if (session?.user && mounted) {
-          console.log('Initial session found:', session.user.email);
-          setUser(session.user);
-          // Always fetch profile for authenticated users
-          const userProfile = await fetchProfile(session.user.id);
-          if (mounted) {
-            setProfile(userProfile);
-          }
-        } else {
-          console.log('No initial session found');
+        if (storedUser) {
+          setUser(storedUser);
+          setProfile(storedProfile || mockAdminProfile);
         }
-
-        // Set up auth state listener
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          async (event, session) => {
-            console.log('Auth state changed:', event, session?.user?.email);
-            
-            if (!mounted) return;
-
-            if (session?.user) {
-              setUser(session.user);
-              // Always fetch profile for authenticated users
-              const userProfile = await fetchProfile(session.user.id);
-              if (mounted) {
-                setProfile(userProfile);
-              }
-            } else {
-              setUser(null);
-              setProfile(null);
-            }
-            
-            // Set loading to false after auth state is determined
-            if (mounted) {
-              setLoading(false);
-            }
-          }
-        );
-
-        // Set loading to false after initial setup
-        if (mounted) {
-          setLoading(false);
-          setInitializing(false);
-        }
-
-        return () => {
-          subscription.unsubscribe();
-        };
       } catch (error) {
         console.error('Error initializing auth:', error);
-        if (mounted) {
-          setLoading(false);
-          setInitializing(false);
-        }
+      } finally {
+        setLoading(false);
       }
     };
 
     initializeAuth();
-
-    return () => {
-      mounted = false;
-    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
-      console.log('Signing in:', email);
+      console.log('Mock sign in:', email);
       
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      if (data.user) {
-        console.log('Sign in successful, user ID:', data.user.id);
-        const userProfile = await fetchProfile(data.user.id);
-        setProfile(userProfile);
+      // Mock authentication - only allow admin credentials
+      if (email === 'admin@noncefirewall.com' && password === 'admin123') {
+        setUser(mockAdminUser);
+        setProfile(mockAdminProfile);
+        
+        localStorageHelpers.setCurrentUser(mockAdminUser);
+        localStorageHelpers.setProfile(mockAdminProfile);
+        
+        toast({
+          title: "Success",
+          description: "Signed in successfully!",
+        });
+      } else {
+        throw new Error('Invalid credentials. Use admin@noncefirewall.com / admin123');
       }
-
-      toast({
-        title: "Success",
-        description: "Signed in successfully!",
-      });
     } catch (error: any) {
       console.error('Sign in error:', error);
       toast({
@@ -169,9 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       console.log('Signing out...');
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-
+      localStorageHelpers.clearAuth();
       setUser(null);
       setProfile(null);
       
@@ -189,21 +102,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateProfile = async (updates: Partial<Profile>) => {
-    if (!user) return;
+  const updateProfile = async (updates: Partial<MockProfile>) => {
+    if (!user || !profile) return;
 
     try {
       console.log('Updating profile:', updates);
-      const { data, error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', user.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setProfile(data);
+      const updatedProfile = { ...profile, ...updates };
+      setProfile(updatedProfile);
+      localStorageHelpers.setProfile(updatedProfile);
+      
       toast({
         title: "Success",
         description: "Profile updated successfully!",
@@ -222,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value = {
     user,
     profile,
-    loading: loading || initializing,
+    loading,
     signIn,
     signOut,
     updateProfile,

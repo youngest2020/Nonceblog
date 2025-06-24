@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { mockBlogPosts, localStorageHelpers, MockBlogPost } from '@/lib/mockData';
 
 export interface BlogPost {
   id: string;
@@ -33,21 +33,13 @@ export const useBlogPosts = () => {
   const fetchPosts = async () => {
     try {
       setLoading(true);
-      console.log('Fetching published posts...');
+      console.log('Fetching published posts from localStorage...');
       
-      const { data, error } = await supabase
-        .from('blog_posts')
-        .select('*')
-        .eq('is_published', true)
-        .order('published_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching posts:', error);
-        throw error;
-      }
-
-      console.log('Fetched posts:', data);
-      setPosts(data || []);
+      const allPosts = localStorageHelpers.getPosts();
+      const publishedPosts = allPosts.filter(post => post.is_published);
+      
+      console.log('Fetched posts:', publishedPosts);
+      setPosts(publishedPosts);
     } catch (error: any) {
       console.error('Error fetching posts:', error);
       toast({
@@ -63,28 +55,6 @@ export const useBlogPosts = () => {
 
   useEffect(() => {
     fetchPosts();
-
-    // Set up real-time subscription for blog posts
-    const subscription = supabase
-      .channel('blog_posts_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'blog_posts',
-          filter: 'is_published=eq.true'
-        },
-        (payload) => {
-          console.log('Real-time update received:', payload);
-          fetchPosts(); // Refetch posts when changes occur
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   return { posts, loading, refetch: fetchPosts };
@@ -100,18 +70,9 @@ export const useAdminBlogPosts = () => {
       setLoading(true);
       console.log('Fetching all posts for admin...');
       
-      const { data, error } = await supabase
-        .from('blog_posts')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching admin posts:', error);
-        throw error;
-      }
-
-      console.log('Fetched admin posts:', data);
-      setPosts(data || []);
+      const allPosts = localStorageHelpers.getPosts();
+      console.log('Fetched admin posts:', allPosts);
+      setPosts(allPosts);
     } catch (error: any) {
       console.error('Error fetching admin posts:', error);
       toast({
@@ -147,30 +108,31 @@ export const useAdminBlogPosts = () => {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '');
 
-      const { data, error } = await supabase
-        .from('blog_posts')
-        .insert([{
-          ...postData,
-          slug,
-          published_at: postData.is_published ? new Date().toISOString() : null,
-        }])
-        .select()
-        .single();
+      const newPost: MockBlogPost = {
+        id: Date.now().toString(),
+        slug,
+        excerpt: postData.excerpt || postData.content.substring(0, 200) + "...",
+        published_at: postData.is_published ? new Date().toISOString() : null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        meta_title: null,
+        meta_description: null,
+        featured: false,
+        reading_time: Math.ceil(postData.content.split(' ').length / 200),
+        ...postData,
+      };
 
-      if (error) {
-        console.error('Error creating post:', error);
-        throw error;
-      }
-
-      console.log('Post created successfully:', data);
-      setPosts(prev => [data, ...prev]);
+      const allPosts = localStorageHelpers.getPosts();
+      const updatedPosts = [newPost, ...allPosts];
+      localStorageHelpers.setPosts(updatedPosts);
+      setPosts(updatedPosts);
       
       toast({
         title: "Success",
         description: "Blog post created successfully!",
       });
 
-      return data;
+      return newPost;
     } catch (error: any) {
       console.error('Error creating post:', error);
       toast({
@@ -199,27 +161,27 @@ export const useAdminBlogPosts = () => {
         updates.published_at = updates.is_published ? new Date().toISOString() : null;
       }
 
-      const { data, error } = await supabase
-        .from('blog_posts')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
+      updates.updated_at = new Date().toISOString();
 
-      if (error) {
-        console.error('Error updating post:', error);
-        throw error;
+      const allPosts = localStorageHelpers.getPosts();
+      const updatedPosts = allPosts.map(post => 
+        post.id === id ? { ...post, ...updates } : post
+      );
+      
+      const updatedPost = updatedPosts.find(post => post.id === id);
+      if (!updatedPost) {
+        throw new Error('Post not found');
       }
 
-      console.log('Post updated successfully:', data);
-      setPosts(prev => prev.map(post => post.id === id ? data : post));
+      localStorageHelpers.setPosts(updatedPosts);
+      setPosts(updatedPosts);
       
       toast({
         title: "Success",
         description: "Blog post updated successfully!",
       });
 
-      return data;
+      return updatedPost;
     } catch (error: any) {
       console.error('Error updating post:', error);
       toast({
@@ -235,18 +197,11 @@ export const useAdminBlogPosts = () => {
     try {
       console.log('Deleting post:', id);
 
-      const { error } = await supabase
-        .from('blog_posts')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        console.error('Error deleting post:', error);
-        throw error;
-      }
-
-      console.log('Post deleted successfully');
-      setPosts(prev => prev.filter(post => post.id !== id));
+      const allPosts = localStorageHelpers.getPosts();
+      const updatedPosts = allPosts.filter(post => post.id !== id);
+      
+      localStorageHelpers.setPosts(updatedPosts);
+      setPosts(updatedPosts);
       
       toast({
         title: "Success",
@@ -267,19 +222,15 @@ export const useAdminBlogPosts = () => {
     try {
       console.log('Fetching post by ID:', id);
 
-      const { data, error } = await supabase
-        .from('blog_posts')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (error) {
-        console.error('Error fetching post:', error);
-        throw error;
+      const allPosts = localStorageHelpers.getPosts();
+      const post = allPosts.find(post => post.id === id || post.slug === id);
+      
+      if (!post) {
+        throw new Error('Post not found');
       }
 
-      console.log('Post fetched successfully:', data);
-      return data;
+      console.log('Post fetched successfully:', post);
+      return post;
     } catch (error: any) {
       console.error('Error fetching post:', error);
       toast({
@@ -293,27 +244,6 @@ export const useAdminBlogPosts = () => {
 
   useEffect(() => {
     fetchAllPosts();
-
-    // Set up real-time subscription for admin posts
-    const subscription = supabase
-      .channel('admin_blog_posts_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'blog_posts'
-        },
-        (payload) => {
-          console.log('Admin real-time update received:', payload);
-          fetchAllPosts(); // Refetch posts when changes occur
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   return { 

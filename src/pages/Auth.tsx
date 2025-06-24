@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { UserPlus, Mail, User, Eye, EyeOff } from "lucide-react";
 
 const Auth = () => {
@@ -25,22 +23,19 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
-            display_name: formData.displayName,
-          }
-        }
-      });
-
-      if (error) throw error;
-
+      console.log('Mock sign up:', formData);
+      
+      // Mock sign up - just show success message
       toast({
         title: "Success",
-        description: "Account created successfully! Please check your email to verify your account.",
+        description: "Account created successfully! This is a mock implementation.",
+      });
+      
+      // Reset form
+      setFormData({
+        email: "",
+        password: "",
+        displayName: ""
       });
     } catch (error: any) {
       toast({
@@ -62,10 +57,16 @@ const Auth = () => {
               <UserPlus className="h-8 w-8 text-blue-600" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
+          <CardTitle className="text-2xl font-bold">Create Account (Mock)</CardTitle>
           <p className="text-gray-600">Join our community</p>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-sm text-blue-800">
+              This is a mock sign-up form. No real account will be created.
+            </p>
+          </div>
+          
           <form onSubmit={handleSignUp} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="displayName">Display Name</Label>
@@ -128,7 +129,7 @@ const Auth = () => {
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Creating Account..." : "Create Account"}
+              {loading ? "Creating Account..." : "Create Account (Mock)"}
             </Button>
           </form>
           

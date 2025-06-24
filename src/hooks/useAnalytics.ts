@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 export interface PostAnalytics {
@@ -63,88 +62,57 @@ export const useAnalytics = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Generate or get visitor ID
-  const getVisitorId = () => {
-    let visitorId = localStorage.getItem('visitor_id');
-    if (!visitorId) {
-      visitorId = 'visitor_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('visitor_id', visitorId);
+  // Mock analytics data
+  const mockPostAnalytics: PostAnalytics[] = [
+    {
+      id: '1',
+      post_id: '1',
+      views: 1250,
+      unique_views: 890,
+      likes: 45,
+      shares: 12,
+      comments_count: 8,
+      reading_time_avg: 180,
+      bounce_rate: 35.5,
+      engagement_rate: 5.2,
+      last_viewed: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    },
+    {
+      id: '2',
+      post_id: '2',
+      views: 890,
+      unique_views: 650,
+      likes: 32,
+      shares: 8,
+      comments_count: 5,
+      reading_time_avg: 150,
+      bounce_rate: 42.1,
+      engagement_rate: 4.8,
+      last_viewed: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     }
-    return visitorId;
+  ];
+
+  const mockAnalyticsSummary: AnalyticsSummary = {
+    total_posts: 3,
+    total_views: 2140,
+    total_unique_views: 1540,
+    total_likes: 77,
+    total_shares: 20,
+    total_comments: 13,
+    avg_engagement_rate: 5.0
   };
 
-  // Generate or get session ID
-  const getSessionId = () => {
-    let sessionId = sessionStorage.getItem('session_id');
-    if (!sessionId) {
-      sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      sessionStorage.setItem('session_id', sessionId);
-    }
-    return sessionId;
-  };
-
-  const fetchPostAnalytics = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('post_analytics')
-        .select(`
-          *,
-          blog_posts!inner(title, slug)
-        `)
-        .order('views', { ascending: false });
-
-      if (error) throw error;
-      setPostAnalytics(data || []);
-    } catch (error: any) {
-      console.error('Error fetching post analytics:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load post analytics",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const fetchPromotionAnalytics = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('promotion_analytics')
-        .select(`
-          *,
-          promotions!inner(title, message)
-        `)
-        .order('total_views', { ascending: false });
-
-      if (error) throw error;
-      setPromotionAnalytics(data || []);
-    } catch (error: any) {
-      console.error('Error fetching promotion analytics:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load promotion analytics",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const fetchAnalyticsSummary = async () => {
-    try {
-      const { data, error } = await supabase.rpc('get_post_analytics_summary');
-      if (error) throw error;
-      setAnalyticsSummary(data[0] || null);
-    } catch (error: any) {
-      console.error('Error fetching analytics summary:', error);
-    }
-  };
-
-  const fetchPromotionSummary = async () => {
-    try {
-      const { data, error } = await supabase.rpc('get_promotion_analytics_summary');
-      if (error) throw error;
-      setPromotionSummary(data[0] || null);
-    } catch (error: any) {
-      console.error('Error fetching promotion summary:', error);
-    }
+  const mockPromotionSummary: PromotionSummary = {
+    total_promotions: 0,
+    total_views: 0,
+    total_unique_views: 0,
+    total_clicks: 0,
+    total_unique_clicks: 0,
+    avg_click_through_rate: 0
   };
 
   const trackPostEngagement = async (
@@ -153,22 +121,32 @@ export const useAnalytics = () => {
     eventData: any = {}
   ) => {
     try {
-      const visitorId = getVisitorId();
-      const sessionId = getSessionId();
-
-      await supabase.rpc('track_post_engagement', {
-        p_post_id: postId,
-        p_event_type: eventType,
-        p_session_id: sessionId,
-        p_visitor_id: visitorId,
-        p_event_data: eventData
-      });
-
-      // Refresh analytics after tracking
-      if (eventType === 'view') {
-        await fetchPostAnalytics();
-        await fetchAnalyticsSummary();
-      }
+      console.log('Mock tracking post engagement:', { postId, eventType, eventData });
+      
+      // Update local analytics
+      setPostAnalytics(prev => prev.map(analytics => {
+        if (analytics.post_id === postId) {
+          const updated = { ...analytics };
+          switch (eventType) {
+            case 'view':
+              updated.views += 1;
+              updated.unique_views += 1;
+              break;
+            case 'like':
+              updated.likes += 1;
+              break;
+            case 'share':
+              updated.shares += 1;
+              break;
+            case 'comment':
+              updated.comments_count += 1;
+              break;
+          }
+          updated.engagement_rate = ((updated.likes + updated.shares + updated.comments_count) / updated.views) * 100;
+          return updated;
+        }
+        return analytics;
+      }));
     } catch (error: any) {
       console.error('Error tracking post engagement:', error);
     }
@@ -180,39 +158,10 @@ export const useAnalytics = () => {
     eventData: any = {}
   ) => {
     try {
-      const visitorId = getVisitorId();
-      const sessionId = getSessionId();
-
-      await supabase.rpc('track_promotion_engagement', {
-        p_promotion_id: promotionId,
-        p_event_type: eventType,
-        p_session_id: sessionId,
-        p_visitor_id: visitorId,
-        p_event_data: eventData
-      });
-
-      // Refresh analytics after tracking
-      await fetchPromotionAnalytics();
-      await fetchPromotionSummary();
+      console.log('Mock tracking promotion engagement:', { promotionId, eventType, eventData });
+      // Mock implementation - no actual tracking
     } catch (error: any) {
       console.error('Error tracking promotion engagement:', error);
-    }
-  };
-
-  const createUserSession = async () => {
-    try {
-      const visitorId = getVisitorId();
-      const sessionId = getSessionId();
-
-      await supabase.rpc('create_user_session', {
-        p_session_id: sessionId,
-        p_visitor_id: visitorId,
-        p_user_agent: navigator.userAgent,
-        p_referrer: document.referrer,
-        p_landing_page: window.location.pathname
-      });
-    } catch (error: any) {
-      console.error('Error creating user session:', error);
     }
   };
 
@@ -220,57 +169,19 @@ export const useAnalytics = () => {
     const loadAnalytics = async () => {
       setLoading(true);
       try {
-        await Promise.all([
-          createUserSession(),
-          fetchPostAnalytics(),
-          fetchPromotionAnalytics(),
-          fetchAnalyticsSummary(),
-          fetchPromotionSummary()
-        ]);
+        // Simulate loading delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        setPostAnalytics(mockPostAnalytics);
+        setPromotionAnalytics([]);
+        setAnalyticsSummary(mockAnalyticsSummary);
+        setPromotionSummary(mockPromotionSummary);
       } finally {
         setLoading(false);
       }
     };
 
     loadAnalytics();
-
-    // Set up real-time subscriptions
-    const postAnalyticsSubscription = supabase
-      .channel('post_analytics_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'post_analytics'
-        },
-        () => {
-          fetchPostAnalytics();
-          fetchAnalyticsSummary();
-        }
-      )
-      .subscribe();
-
-    const promotionAnalyticsSubscription = supabase
-      .channel('promotion_analytics_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'promotion_analytics'
-        },
-        () => {
-          fetchPromotionAnalytics();
-          fetchPromotionSummary();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      postAnalyticsSubscription.unsubscribe();
-      promotionAnalyticsSubscription.unsubscribe();
-    };
   }, []);
 
   return {
@@ -282,12 +193,8 @@ export const useAnalytics = () => {
     trackPostEngagement,
     trackPromotionEngagement,
     refetch: async () => {
-      await Promise.all([
-        fetchPostAnalytics(),
-        fetchPromotionAnalytics(),
-        fetchAnalyticsSummary(),
-        fetchPromotionSummary()
-      ]);
+      // Mock refetch
+      console.log('Mock analytics refetch');
     }
   };
 };
