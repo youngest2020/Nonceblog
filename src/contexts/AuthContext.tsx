@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
@@ -30,6 +29,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
   const { toast } = useToast();
 
   // Fetch user profile from database
@@ -98,11 +98,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setUser(null);
               setProfile(null);
             }
+            
+            // Set loading to false after auth state is determined
+            if (mounted) {
+              setLoading(false);
+            }
           }
         );
 
+        // Set loading to false after initial setup
         if (mounted) {
           setLoading(false);
+          setInitializing(false);
         }
 
         return () => {
@@ -112,6 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Error initializing auth:', error);
         if (mounted) {
           setLoading(false);
+          setInitializing(false);
         }
       }
     };
@@ -214,7 +222,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value = {
     user,
     profile,
-    loading,
+    loading: loading || initializing,
     signIn,
     signOut,
     updateProfile,

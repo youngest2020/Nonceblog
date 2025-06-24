@@ -1,4 +1,3 @@
-
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,19 +34,19 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">Authenticating...</p>
         </div>
       </div>
     );
   }
 
-  // Don't render anything while redirecting
+  // Show loading while redirecting (prevents flash)
   if (!user || (requireAdmin && (!profile || !profile.is_admin))) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Redirecting to login...</p>
+          <p className="text-gray-600">Redirecting...</p>
         </div>
       </div>
     );
