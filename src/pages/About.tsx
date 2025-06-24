@@ -1,4 +1,3 @@
-
 import BlogHeader from "@/components/BlogHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Shield, Book, Users, Target, Award, Globe } from "lucide-react";
@@ -12,9 +11,13 @@ const About = () => {
         {/* Hero Section */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-100 rounded-full mb-6">
-            <Shield className="h-10 w-10 text-blue-600" />
+            <img 
+              src="/lovable-uploads/21cc5b21-d175-4e0e-8222-9b97c6c1071f.png" 
+              alt="Nonce Firewall Logo" 
+              className="h-12 w-12"
+            />
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">About Nonce Firewall</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">About Nonce Firewall Blogs</h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             Tech based educational blogs and multipurpose blogging arena
           </p>
@@ -25,7 +28,7 @@ const About = () => {
           <CardContent className="p-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Our Mission</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              At Nonce Firewall, we believe that knowledge should be accessible to everyone. Our mission is to create 
+              At Nonce Firewall Blogs, we believe that knowledge should be accessible to everyone. Our mission is to create 
               a comprehensive educational platform that bridges the gap between complex technical concepts and 
               practical understanding. We strive to empower individuals and organizations with the knowledge they 
               need to navigate the ever-evolving digital landscape safely and effectively.
