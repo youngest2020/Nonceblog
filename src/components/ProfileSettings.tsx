@@ -41,9 +41,9 @@ const ProfileSettings = () => {
     }
   };
 
-  const ensureAvatarsBucket = async () => {
+  const checkAvatarsBucket = async () => {
     try {
-      // Check if bucket exists
+      // Check if bucket exists by listing buckets
       const { data: buckets, error: listError } = await supabase.storage.listBuckets();
       
       if (listError) {
@@ -54,24 +54,13 @@ const ProfileSettings = () => {
       const avatarsBucket = buckets?.find(bucket => bucket.name === 'avatars');
       
       if (!avatarsBucket) {
-        // Try to create the bucket
-        const { error: createError } = await supabase.storage.createBucket('avatars', {
-          public: true,
-          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
-          fileSizeLimit: 5242880 // 5MB
-        });
-
-        if (createError) {
-          console.error('Error creating avatars bucket:', createError);
-          return false;
-        }
-        
-        console.log('Avatars bucket created successfully');
+        console.error('Avatars bucket does not exist. Please create it manually in the Supabase dashboard.');
+        return false;
       }
       
       return true;
     } catch (error) {
-      console.error('Error ensuring avatars bucket:', error);
+      console.error('Error checking avatars bucket:', error);
       return false;
     }
   };
@@ -100,12 +89,12 @@ const ProfileSettings = () => {
 
     setIsUploading(true);
     try {
-      console.log('Ensuring avatars bucket exists...');
+      console.log('Checking if avatars bucket exists...');
       
-      // Ensure the avatars bucket exists
-      const bucketReady = await ensureAvatarsBucket();
-      if (!bucketReady) {
-        throw new Error('Failed to create or access avatars bucket. Please contact support.');
+      // Check if the avatars bucket exists
+      const bucketExists = await checkAvatarsBucket();
+      if (!bucketExists) {
+        throw new Error('The avatars storage bucket does not exist. Please create it in your Supabase project dashboard under Storage section.');
       }
 
       console.log('Uploading profile picture to Supabase Storage...');
