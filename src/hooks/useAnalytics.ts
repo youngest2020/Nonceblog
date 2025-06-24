@@ -121,7 +121,7 @@ export const useAnalytics = () => {
         .from('post_analytics')
         .select('*')
         .eq('post_id', postId)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
         throw error;
@@ -210,7 +210,7 @@ export const useAnalytics = () => {
 
   const trackPromotionEngagement = async (
     promotionId: string,
-    eventType: 'view' | 'click',
+    eventType: 'view' | 'click' | 'close',
     eventData: any = {}
   ) => {
     try {
@@ -221,7 +221,7 @@ export const useAnalytics = () => {
         .from('promotion_analytics')
         .select('*')
         .eq('promotion_id', promotionId)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
         throw error;
@@ -258,6 +258,9 @@ export const useAnalytics = () => {
           case 'click':
             updates.total_clicks = (analytics.total_clicks || 0) + 1;
             updates.unique_clicks = (analytics.unique_clicks || 0) + 1;
+            break;
+          case 'close':
+            // Just track the close event without updating counters
             break;
         }
 
@@ -311,6 +314,62 @@ export const useAnalytics = () => {
     };
 
     loadAnalytics();
+
+    // Set up realtime subscriptions for analytics
+    const postAnalyticsChannel = supabase
+      .channel('post-analytics-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_analytics'
+        },
+        (payload) => {
+          console.log('Realtime update for post analytics:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            setPostAnalytics(prev => [payload.new as PostAnalytics, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setPostAnalytics(prev => prev.map(analytics => 
+              analytics.id === payload.new.id ? payload.new as PostAnalytics : analytics
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            setPostAnalytics(prev => prev.filter(analytics => analytics.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    const promotionAnalyticsChannel = supabase
+      .channel('promotion-analytics-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'promotion_analytics'
+        },
+        (payload) => {
+          console.log('Realtime update for promotion analytics:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            setPromotionAnalytics(prev => [payload.new as PromotionAnalytics, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setPromotionAnalytics(prev => prev.map(analytics => 
+              analytics.id === payload.new.id ? payload.new as PromotionAnalytics : analytics
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            setPromotionAnalytics(prev => prev.filter(analytics => analytics.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(postAnalyticsChannel);
+      supabase.removeChannel(promotionAnalyticsChannel);
+    };
   }, []);
 
   useEffect(() => {

@@ -201,6 +201,36 @@ export const usePromotions = () => {
 
   useEffect(() => {
     fetchPromotions();
+
+    // Set up realtime subscription for promotions
+    const channel = supabase
+      .channel('promotions-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'promotions'
+        },
+        (payload) => {
+          console.log('Realtime update for promotions:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            setPromotions(prev => [payload.new as Promotion, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setPromotions(prev => prev.map(promotion => 
+              promotion.id === payload.new.id ? payload.new as Promotion : promotion
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            setPromotions(prev => prev.filter(promotion => promotion.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   return { 

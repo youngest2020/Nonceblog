@@ -17,24 +17,14 @@ export const useBlogPosts = () => {
       setLoading(true);
       console.log('Fetching published posts from Supabase...');
       
-      // Use a timeout to prevent infinite loading
-      const timeoutId = setTimeout(() => {
-        console.warn('Blog posts fetch timeout, setting empty array');
-        setPosts([]);
-        setLoading(false);
-      }, 10000);
-
       const { data, error } = await supabase
         .from('blog_posts')
         .select('*')
         .eq('is_published', true)
         .order('published_at', { ascending: false });
 
-      clearTimeout(timeoutId);
-
       if (error) {
         console.error('Error fetching posts:', error);
-        // Don't throw error, just set empty array and show user-friendly message
         setPosts([]);
         return;
       }
@@ -51,6 +41,49 @@ export const useBlogPosts = () => {
 
   useEffect(() => {
     fetchPosts();
+
+    // Set up realtime subscription for published posts
+    const channel = supabase
+      .channel('public-blog-posts')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'blog_posts',
+          filter: 'is_published=eq.true'
+        },
+        (payload) => {
+          console.log('Realtime update for published posts:', payload);
+          
+          if (payload.eventType === 'INSERT' && payload.new.is_published) {
+            setPosts(prev => [payload.new as BlogPost, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            if (payload.new.is_published) {
+              setPosts(prev => {
+                const index = prev.findIndex(p => p.id === payload.new.id);
+                if (index >= 0) {
+                  const newPosts = [...prev];
+                  newPosts[index] = payload.new as BlogPost;
+                  return newPosts;
+                } else {
+                  return [payload.new as BlogPost, ...prev];
+                }
+              });
+            } else {
+              // Post was unpublished, remove it
+              setPosts(prev => prev.filter(p => p.id !== payload.old.id));
+            }
+          } else if (payload.eventType === 'DELETE') {
+            setPosts(prev => prev.filter(p => p.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   return { posts, loading, refetch: fetchPosts };
@@ -66,19 +99,10 @@ export const useAdminBlogPosts = () => {
       setLoading(true);
       console.log('Fetching all posts for admin...');
       
-      // Use a timeout to prevent infinite loading
-      const timeoutId = setTimeout(() => {
-        console.warn('Admin posts fetch timeout, setting empty array');
-        setPosts([]);
-        setLoading(false);
-      }, 10000);
-      
       const { data, error } = await supabase
         .from('blog_posts')
         .select('*')
         .order('created_at', { ascending: false });
-
-      clearTimeout(timeoutId);
 
       if (error) {
         console.error('Error fetching admin posts:', error);
@@ -110,9 +134,15 @@ export const useAdminBlogPosts = () => {
     try {
       console.log('Creating post:', postData);
 
+      // Generate slug from title if not provided
+      const slug = postData.slug || postData.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
       const { data, error } = await supabase
         .from('blog_posts')
-        .insert(postData)
+        .insert({ ...postData, slug })
         .select()
         .single();
 
@@ -234,6 +264,36 @@ export const useAdminBlogPosts = () => {
 
   useEffect(() => {
     fetchAllPosts();
+
+    // Set up realtime subscription for all posts (admin view)
+    const channel = supabase
+      .channel('admin-blog-posts')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'blog_posts'
+        },
+        (payload) => {
+          console.log('Realtime update for admin posts:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            setPosts(prev => [payload.new as BlogPost, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setPosts(prev => prev.map(post => 
+              post.id === payload.new.id ? payload.new as BlogPost : post
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            setPosts(prev => prev.filter(post => post.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   return { 

@@ -41,27 +41,44 @@ const ProfileSettings = () => {
     }
   };
 
-  const checkAvatarsBucket = async () => {
+  const ensureAvatarsBucket = async () => {
     try {
-      // Check if bucket exists by listing buckets
+      console.log('Checking if avatars bucket exists...');
+      
+      // First, try to list buckets to see if avatars exists
       const { data: buckets, error: listError } = await supabase.storage.listBuckets();
       
       if (listError) {
         console.error('Error listing buckets:', listError);
-        return false;
+        throw new Error('Unable to access storage. Please check your connection.');
       }
 
       const avatarsBucket = buckets?.find(bucket => bucket.name === 'avatars');
       
       if (!avatarsBucket) {
-        console.error('Avatars bucket does not exist. Please create it manually in the Supabase dashboard.');
-        return false;
+        console.log('Avatars bucket not found, attempting to create...');
+        
+        // Try to create the bucket
+        const { data: createData, error: createError } = await supabase.storage.createBucket('avatars', {
+          public: true,
+          fileSizeLimit: 5242880, // 5MB
+          allowedMimeTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+        });
+
+        if (createError) {
+          console.error('Error creating avatars bucket:', createError);
+          throw new Error('Unable to create storage bucket. Please contact support or create the "avatars" bucket manually in your Supabase dashboard.');
+        }
+
+        console.log('Avatars bucket created successfully:', createData);
+      } else {
+        console.log('Avatars bucket exists:', avatarsBucket);
       }
       
       return true;
-    } catch (error) {
-      console.error('Error checking avatars bucket:', error);
-      return false;
+    } catch (error: any) {
+      console.error('Error ensuring avatars bucket:', error);
+      throw error;
     }
   };
 
@@ -89,19 +106,24 @@ const ProfileSettings = () => {
 
     setIsUploading(true);
     try {
-      console.log('Checking if avatars bucket exists...');
-      
-      // Check if the avatars bucket exists
-      const bucketExists = await checkAvatarsBucket();
-      if (!bucketExists) {
-        throw new Error('The avatars storage bucket does not exist. Please create it in your Supabase project dashboard under Storage section.');
-      }
+      // Ensure the avatars bucket exists
+      await ensureAvatarsBucket();
 
       console.log('Uploading profile picture to Supabase Storage...');
       
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
       const filePath = `${user.id}/${fileName}`;
+
+      // Delete old profile picture if it exists
+      if (formData.profile_picture) {
+        try {
+          const oldPath = formData.profile_picture.split('/').slice(-2).join('/');
+          await supabase.storage.from('avatars').remove([oldPath]);
+        } catch (error) {
+          console.log('Could not delete old profile picture:', error);
+        }
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
