@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,76 +5,50 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Lock, Shield, Eye, EyeOff } from "lucide-react";
 
 const SecureAdmin = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signIn, loading } = useAuth();
   const [credentials, setCredentials] = useState({
     email: "",
     password: ""
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    
+    if (isSubmitting || loading) return;
+    
+    setIsSubmitting(true);
     
     try {
       console.log("=== LOGIN ATTEMPT ===");
       console.log("Email being used:", credentials.email);
       
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: credentials.email.trim(),
-        password: credentials.password,
-      });
-
-      if (error) {
-        console.error("Supabase auth error:", error);
-        throw new Error(error.message);
-      }
-
-      console.log("Login successful, user ID:", data.user.id);
-
-      // Check if user is admin
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', data.user.id)
-        .single();
-
-      if (profileError) {
-        console.error("Profile fetch error:", profileError);
-        throw new Error('Unable to verify admin status');
-      }
-
-      if (!profile?.is_admin) {
-        console.log("User is not admin, signing out");
-        await supabase.auth.signOut();
-        throw new Error('Access denied. Admin privileges required.');
-      }
-
-      console.log("Admin access confirmed");
-      toast({
-        title: "Success",
-        description: "Welcome to the admin panel!",
-      });
-      navigate("/admin");
+      await signIn(credentials.email.trim(), credentials.password);
+      
+      // Wait a moment for auth state to update
+      setTimeout(() => {
+        navigate("/admin");
+      }, 1000);
+      
     } catch (error: any) {
       console.error("=== LOGIN ERROR ===");
       console.error("Error message:", error.message);
       
-      toast({
-        title: "Login Failed",
-        description: error.message || "Unable to sign in. Please check your credentials.",
-        variant: "destructive",
-      });
+      // The error is already handled in the signIn function
+      // Just ensure we're not stuck in loading state
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
+
+  const isLoading = loading || isSubmitting;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-purple-700 flex items-center justify-center px-4">
@@ -100,7 +73,8 @@ const SecureAdmin = () => {
                 onChange={(e) => setCredentials(prev => ({ ...prev, email: e.target.value }))}
                 placeholder="Enter your admin email"
                 required
-                disabled={loading}
+                disabled={isLoading}
+                autoComplete="email"
               />
             </div>
             
@@ -115,7 +89,8 @@ const SecureAdmin = () => {
                   placeholder="Enter your password"
                   className="pr-10"
                   required
-                  disabled={loading}
+                  disabled={isLoading}
+                  autoComplete="current-password"
                 />
                 <Button
                   type="button"
@@ -123,7 +98,8 @@ const SecureAdmin = () => {
                   size="sm"
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
-                  disabled={loading}
+                  disabled={isLoading}
+                  tabIndex={-1}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4 text-gray-400" />
@@ -134,14 +110,26 @@ const SecureAdmin = () => {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={isLoading}>
               <Lock className="h-4 w-4 mr-2" />
-              {loading ? "Signing In..." : "Sign In"}
+              {isLoading ? "Signing In..." : "Sign In"}
             </Button>
           </form>
           
+          {isLoading && (
+            <div className="mt-4 text-center">
+              <div className="inline-flex items-center px-4 py-2 font-semibold leading-6 text-sm shadow rounded-md text-blue-500 bg-blue-100 transition ease-in-out duration-150">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Authenticating...
+              </div>
+            </div>
+          )}
+          
           <div className="mt-4 text-center text-sm text-gray-600">
-            <p>If you're having trouble logging in, check the browser console for detailed error information.</p>
+            <p>If you're having trouble logging in, please check your credentials and try again.</p>
           </div>
         </CardContent>
       </Card>
