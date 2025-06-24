@@ -17,7 +17,7 @@ const About = () => {
               className="h-12 w-12"
             />
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">About Nonce Firewall Blogs</h1>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-4">About Nonce Firewall Blogs</h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             Tech based educational blogs and multipurpose blogging arena
           </p>
