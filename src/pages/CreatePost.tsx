@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BlogHeader from "@/components/BlogHeader";
 import EnhancedPostEditor from "@/components/EnhancedPostEditor";
+import StorageSetupGuide from "@/components/StorageSetupGuide";
 import { useAdminBlogPosts } from "@/hooks/useBlogPosts";
 import { uploadBlogImage, debugStorageSetup } from "@/lib/imageUpload";
 import { testStorageSetup, testImageUpload } from "@/lib/storageTest";
@@ -14,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Image, AlertTriangle, TestTube, CheckCircle, XCircle, Wrench, Plus, RefreshCw } from "lucide-react";
+import { Upload, Image, AlertTriangle, TestTube, CheckCircle, XCircle, Wrench, Plus, RefreshCw, HelpCircle } from "lucide-react";
 
 const categories = [
   "Technology",
@@ -65,6 +66,7 @@ const CreatePost = () => {
   const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
   const [isRunningDiagnostic, setIsRunningDiagnostic] = useState(false);
   const [isCreatingBucket, setIsCreatingBucket] = useState(false);
+  const [showSetupGuide, setShowSetupGuide] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,11 +158,12 @@ const CreatePost = () => {
     } catch (error: any) {
       console.error('Featured image upload failed:', error);
       
-      // Check if it's a bucket-related error and suggest using the diagnostic tools
-      if (error.message.includes('bucket') || error.message.includes('storage')) {
+      // Check if it's a bucket-related error and suggest using the setup guide
+      if (error.message.includes('bucket') || error.message.includes('storage') || error.message.includes('policy')) {
+        setShowSetupGuide(true);
         toast({
           title: "Storage Setup Required",
-          description: "The blog-images storage bucket needs to be created. Please use the 'Create Bucket' button below.",
+          description: "Please follow the setup guide below to configure storage properly.",
           variant: "destructive",
         });
       } else {
@@ -186,12 +189,18 @@ const CreatePost = () => {
           title: "Diagnostic Complete",
           description: "Storage setup is working correctly!",
         });
+        setShowSetupGuide(false);
       } else {
         toast({
           title: "Diagnostic Found Issues",
           description: result.error,
           variant: "destructive",
         });
+        
+        // Show setup guide if there are RLS or bucket issues
+        if (result.error.includes('policy') || result.error.includes('bucket') || result.error.includes('permission')) {
+          setShowSetupGuide(true);
+        }
       }
     } catch (error: any) {
       setDiagnosticResult({ success: false, error: error.message });
@@ -226,11 +235,12 @@ const CreatePost = () => {
           variant: "destructive",
         });
         
-        // Show additional help if it's a permission issue
-        if (result.suggestion) {
+        // Show setup guide if it's a permission/policy issue
+        if (result.error.includes('policy') || result.error.includes('permission') || result.error.includes('violates')) {
+          setShowSetupGuide(true);
           toast({
-            title: "Suggestion",
-            description: result.suggestion,
+            title: "Manual Setup Required",
+            description: "Please follow the setup guide below to configure storage policies.",
           });
         }
       }
@@ -240,6 +250,7 @@ const CreatePost = () => {
         description: "Failed to create bucket",
         variant: "destructive",
       });
+      setShowSetupGuide(true);
     } finally {
       setIsCreatingBucket(false);
     }
@@ -279,12 +290,14 @@ const CreatePost = () => {
             title: "Quick Fix Complete",
             description: "Storage is now ready for image uploads!",
           });
+          setShowSetupGuide(false);
         } else {
           toast({
             title: "Bucket Created",
             description: "Bucket created but there may be permission issues. Check diagnostic results.",
             variant: "destructive",
           });
+          setShowSetupGuide(true);
         }
       } else {
         toast({
@@ -292,6 +305,7 @@ const CreatePost = () => {
           description: createResult.error,
           variant: "destructive",
         });
+        setShowSetupGuide(true);
       }
     } catch (error: any) {
       toast({
@@ -299,6 +313,7 @@ const CreatePost = () => {
         description: "Quick fix failed",
         variant: "destructive",
       });
+      setShowSetupGuide(true);
     } finally {
       setIsCreatingBucket(false);
     }
@@ -320,7 +335,7 @@ const CreatePost = () => {
               <span className="font-medium text-blue-800">Storage Setup & Diagnostic Tools</span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
               <Button 
                 type="button" 
                 variant="default" 
@@ -373,6 +388,17 @@ const CreatePost = () => {
               >
                 Debug Storage
               </Button>
+
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowSetupGuide(!showSetupGuide)}
+                className="bg-orange-50 hover:bg-orange-100 border-orange-200"
+              >
+                <HelpCircle className="h-4 w-4 mr-2" />
+                Setup Guide
+              </Button>
             </div>
 
             {/* Diagnostic Results */}
@@ -404,11 +430,12 @@ const CreatePost = () => {
                   
                   {!diagnosticResult.success && (
                     <div className="space-y-2">
-                      {diagnosticResult.canCreateBucket && (
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <p className="font-medium text-blue-800 mb-2">🔧 Quick Solution:</p>
-                          <p className="text-blue-700 text-sm">
-                            Click the "Quick Fix" button above to automatically create the blog-images bucket and verify the setup.
+                      {(diagnosticResult.error.includes('policy') || diagnosticResult.error.includes('permission')) && (
+                        <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <p className="font-medium text-orange-800 mb-2">🔧 RLS Policy Issue Detected:</p>
+                          <p className="text-orange-700 text-sm">
+                            This is a Row Level Security policy issue. Click "Setup Guide" above for step-by-step instructions 
+                            to fix this in your Supabase dashboard.
                           </p>
                         </div>
                       )}
@@ -418,19 +445,6 @@ const CreatePost = () => {
                           <p className="font-medium">Available buckets:</p>
                           <ul className="list-disc list-inside ml-4">
                             {diagnosticResult.availableBuckets.map((bucket: any) => (
-                              <li key={bucket.id}>
-                                {bucket.id} {bucket.public ? '(public)' : '(private)'}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {diagnosticResult.similarBuckets && diagnosticResult.similarBuckets.length > 0 && (
-                        <div>
-                          <p className="font-medium">Similar buckets found:</p>
-                          <ul className="list-disc list-inside ml-4">
-                            {diagnosticResult.similarBuckets.map((bucket: any) => (
                               <li key={bucket.id}>
                                 {bucket.id} {bucket.public ? '(public)' : '(private)'}
                               </li>
@@ -459,10 +473,16 @@ const CreatePost = () => {
             )}
             
             <p className="text-xs text-blue-700 mt-2">
-              💡 <strong>Quick Fix</strong> will automatically create the bucket and verify setup. 
-              Use <strong>Full Diagnostic</strong> for detailed troubleshooting. Check browser console for detailed logs.
+              💡 <strong>Quick Fix</strong> attempts automatic setup. If it fails, use the <strong>Setup Guide</strong> for manual configuration.
             </p>
           </div>
+
+          {/* Storage Setup Guide */}
+          {showSetupGuide && (
+            <div className="mt-6">
+              <StorageSetupGuide />
+            </div>
+          )}
         </div>
 
         <Card>
