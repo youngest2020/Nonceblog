@@ -12,26 +12,58 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
       throw new Error('File size must be less than 10MB');
     }
 
-    console.log('Uploading blog image to Supabase Storage:', file.name);
+    console.log('Starting blog image upload process...');
+    console.log('File details:', { name: file.name, size: file.size, type: file.type });
 
+    // Test Supabase connection first
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('Auth error:', authError);
+        throw new Error('Authentication required. Please sign in again.');
+      }
+      if (!user) {
+        throw new Error('You must be signed in to upload images.');
+      }
+      console.log('User authenticated:', user.email);
+    } catch (authError) {
+      console.error('Authentication check failed:', authError);
+      throw new Error('Authentication failed. Please sign in again.');
+    }
+
+    // Check if bucket exists
+    console.log('Checking if blog-images bucket exists...');
+    try {
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      
+      if (bucketsError) {
+        console.error('Error listing buckets:', bucketsError);
+        throw new Error('Unable to access storage. Please try again.');
+      }
+
+      console.log('Available buckets:', buckets?.map(b => b.id));
+      
+      const blogImagesBucket = buckets?.find(bucket => bucket.id === 'blog-images');
+      if (!blogImagesBucket) {
+        console.error('blog-images bucket not found in:', buckets?.map(b => b.id));
+        throw new Error('Blog images storage bucket not found. Please contact support.');
+      }
+      
+      console.log('blog-images bucket found:', blogImagesBucket);
+    } catch (bucketError) {
+      console.error('Bucket check failed:', bucketError);
+      throw bucketError;
+    }
+
+    // Generate unique filename
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-    const filePath = `blog-images/${fileName}`;
+    const filePath = fileName; // Store directly in bucket root for simplicity
 
-    // Check if bucket exists, if not provide helpful error
-    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-    
-    if (bucketsError) {
-      console.error('Error checking buckets:', bucketsError);
-      throw new Error('Unable to access storage. Please try again.');
-    }
+    console.log('Uploading to path:', filePath);
 
-    const blogImagesBucket = buckets?.find(bucket => bucket.id === 'blog-images');
-    if (!blogImagesBucket) {
-      throw new Error('Blog images storage bucket not found. Please contact support.');
-    }
-
-    const { error: uploadError } = await supabase.storage
+    // Upload the file
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('blog-images')
       .upload(filePath, file, {
         cacheControl: '3600',
@@ -39,43 +71,62 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
       });
 
     if (uploadError) {
-      console.error('Upload error:', uploadError);
+      console.error('Upload error details:', uploadError);
       
       if (uploadError.message.includes('Duplicate')) {
         // Retry with a different filename
         const retryFileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const retryFilePath = `blog-images/${retryFileName}`;
+        console.log('Retrying upload with filename:', retryFileName);
         
-        const { error: retryError } = await supabase.storage
+        const { data: retryData, error: retryError } = await supabase.storage
           .from('blog-images')
-          .upload(retryFilePath, file, {
+          .upload(retryFileName, file, {
             cacheControl: '3600',
             upsert: false
           });
           
         if (retryError) {
-          throw retryError;
+          console.error('Retry upload failed:', retryError);
+          throw new Error(`Upload failed: ${retryError.message}`);
         }
         
-        const { data } = supabase.storage
+        const { data: retryUrlData } = supabase.storage
           .from('blog-images')
-          .getPublicUrl(retryFilePath);
+          .getPublicUrl(retryFileName);
 
-        console.log('Blog image uploaded successfully (retry):', data.publicUrl);
-        return data.publicUrl;
+        console.log('Image uploaded successfully (retry):', retryUrlData.publicUrl);
+        return retryUrlData.publicUrl;
       }
       
-      throw uploadError;
+      throw new Error(`Upload failed: ${uploadError.message}`);
     }
 
-    const { data } = supabase.storage
+    // Get the public URL
+    const { data: urlData } = supabase.storage
       .from('blog-images')
       .getPublicUrl(filePath);
 
-    console.log('Blog image uploaded successfully:', data.publicUrl);
-    return data.publicUrl;
+    if (!urlData.publicUrl) {
+      throw new Error('Failed to get public URL for uploaded image');
+    }
+
+    console.log('Image uploaded successfully:', urlData.publicUrl);
+    return urlData.publicUrl;
+    
   } catch (error: any) {
     console.error('Blog image upload error:', error);
+    
+    // Provide more specific error messages
+    if (error.message.includes('JWT')) {
+      throw new Error('Session expired. Please sign out and sign in again.');
+    }
+    if (error.message.includes('network')) {
+      throw new Error('Network error. Please check your connection and try again.');
+    }
+    if (error.message.includes('bucket')) {
+      throw new Error('Storage configuration error. Please contact support.');
+    }
+    
     throw error;
   }
 };
@@ -87,11 +138,10 @@ export const deleteBlogImage = async (url: string): Promise<void> => {
     // Extract file path from URL
     const urlParts = url.split('/');
     const fileName = urlParts[urlParts.length - 1];
-    const filePath = `blog-images/${fileName}`;
 
     const { error } = await supabase.storage
       .from('blog-images')
-      .remove([filePath]);
+      .remove([fileName]);
 
     if (error) {
       console.error('Delete error:', error);
