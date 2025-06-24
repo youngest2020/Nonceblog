@@ -110,17 +110,51 @@ const EnhancedPromotionalPopup = ({ currentPage = '/' }: EnhancedPromotionalPopu
   };
 
   const handleClick = async () => {
-    if (currentPromotion) {
-      const visitorId = getVisitorId();
-      await trackPromotionClick(currentPromotion.id, visitorId);
+    if (currentPromotion && currentPromotion.button_link) {
+      console.log('🔗 Promotional button clicked!');
+      console.log('📊 Tracking click for promotion:', currentPromotion.id);
+      console.log('🌐 Opening external link:', currentPromotion.button_link);
       
-      // Open external link in new tab
-      window.open(currentPromotion.button_link, '_blank', 'noopener,noreferrer');
-      setIsVisible(false);
+      try {
+        // Track the click first
+        const visitorId = getVisitorId();
+        await trackPromotionClick(currentPromotion.id, visitorId);
+        console.log('✅ Click tracked successfully');
+        
+        // Validate URL format
+        let linkUrl = currentPromotion.button_link;
+        if (!linkUrl.startsWith('http://') && !linkUrl.startsWith('https://')) {
+          linkUrl = 'https://' + linkUrl;
+          console.log('🔧 Auto-corrected URL to:', linkUrl);
+        }
+        
+        // Open external link in new tab with security measures
+        const newWindow = window.open(linkUrl, '_blank', 'noopener,noreferrer');
+        
+        if (newWindow) {
+          console.log('🚀 External link opened successfully in new tab');
+        } else {
+          console.warn('⚠️ Popup blocked - trying alternative method');
+          // Fallback for popup blockers
+          window.location.href = linkUrl;
+        }
+        
+        // Close the promotional popup
+        setIsVisible(false);
+        
+      } catch (error) {
+        console.error('❌ Error handling promotional click:', error);
+        // Still try to open the link even if tracking fails
+        window.open(currentPromotion.button_link, '_blank', 'noopener,noreferrer');
+        setIsVisible(false);
+      }
+    } else {
+      console.warn('⚠️ No valid promotion or button link found');
     }
   };
 
   const handleClose = () => {
+    console.log('❌ Promotional popup closed by user');
     setIsVisible(false);
   };
 
@@ -148,9 +182,18 @@ const EnhancedPromotionalPopup = ({ currentPage = '/' }: EnhancedPromotionalPopu
             className="w-full" 
             size="sm"
             onClick={handleClick}
+            disabled={!currentPromotion.button_link}
           >
             {currentPromotion.button_text}
           </Button>
+          
+          {/* Debug info in development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-2 text-xs text-gray-400 border-t pt-2">
+              <div>ID: {currentPromotion.id}</div>
+              <div>Link: {currentPromotion.button_link}</div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
