@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Trash2, Mail, Eye, EyeOff, Copy } from "lucide-react";
+import { UserPlus, Trash2, Mail, Eye, EyeOff, Copy, User } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -50,6 +51,36 @@ const UserManagement = () => {
 
   useEffect(() => {
     fetchUsers();
+
+    // Set up realtime subscription for user changes
+    const channel = supabase
+      .channel('profiles-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          console.log('Realtime update for profiles:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            setUsers(prev => [payload.new as Profile, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setUsers(prev => prev.map(user => 
+              user.id === payload.new.id ? payload.new as Profile : user
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            setUsers(prev => prev.filter(user => user.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const generatePassword = () => {
@@ -305,11 +336,15 @@ const UserManagement = () => {
                 className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center space-x-4">
-                  <img 
-                    src={user.profile_picture || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face"} 
-                    alt={user.display_name || 'User'}
-                    className="w-10 h-10 rounded-full object-cover"
-                  />
+                  <Avatar className="w-10 h-10">
+                    <AvatarImage 
+                      src={user.profile_picture || undefined} 
+                      alt={user.display_name || 'User'}
+                    />
+                    <AvatarFallback>
+                      <User className="h-5 w-5" />
+                    </AvatarFallback>
+                  </Avatar>
                   <div>
                     <div className="flex items-center space-x-2">
                       <h4 className="font-medium text-gray-900">{user.display_name || 'No Name'}</h4>
