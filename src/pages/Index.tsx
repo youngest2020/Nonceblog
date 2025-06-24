@@ -1,9 +1,9 @@
-
 import { useState } from "react";
 import BlogHeader from "@/components/BlogHeader";
 import BlogPostCard from "@/components/BlogPostCard";
 import FeaturedPostsCarousel from "@/components/FeaturedPostsCarousel";
 import ContactForm from "@/components/ContactForm";
+import EnhancedPromotionalPopup from "@/components/EnhancedPromotionalPopup";
 import { useBlogPosts } from "@/hooks/useBlogPosts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,21 +121,7 @@ const Index = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
             {filteredPosts.map((post) => (
               <div key={post.id} className="animate-fade-in">
-                <BlogPostCard post={{
-                  id: post.id,
-                  title: post.title,
-                  excerpt: post.excerpt || "",
-                  content: post.content || "",
-                  author: post.author_name || "Unknown",
-                  authorId: post.author_id,
-                  category: post.category || "General",
-                  tags: post.tags || [],
-                  imageUrl: post.image_url || "https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=800&h=400&fit=crop",
-                  publishedAt: post.published_at || post.created_at || new Date().toISOString(),
-                  published: post.is_published || false,
-                  mediaItems: post.media_items || [],
-                  socialHandles: post.social_handles || {}
-                }} />
+                <BlogPostCard post={post} />
               </div>
             ))}
           </div>
@@ -166,6 +152,9 @@ const Index = () => {
 
       {/* Contact Form */}
       <ContactForm />
+
+      {/* Enhanced Promotional Popup */}
+      <EnhancedPromotionalPopup currentPage="/" />
     </div>
   );
 };

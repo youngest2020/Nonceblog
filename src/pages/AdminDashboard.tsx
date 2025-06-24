@@ -1,7 +1,7 @@
 import { useState } from "react";
 import BlogHeader from "@/components/BlogHeader";
 import UserManagement from "@/components/UserManagement";
-import PromotionSettings from "@/components/PromotionSettings";
+import EnhancedPromotionSettings from "@/components/EnhancedPromotionSettings";
 import ProfileSettings from "@/components/ProfileSettings";
 import { useAdminBlogPosts } from "@/hooks/useBlogPosts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,7 +48,7 @@ const AdminDashboard = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-          <p className="text-gray-600">Manage your blog posts, users, and settings</p>
+          <p className="text-gray-600">Manage your blog posts, users, promotions, and settings</p>
         </div>
 
         <Tabs defaultValue="posts" className="space-y-6">
@@ -159,7 +159,7 @@ const AdminDashboard = () => {
           </TabsContent>
 
           <TabsContent value="promotions">
-            <PromotionSettings />
+            <EnhancedPromotionSettings />
           </TabsContent>
 
           <TabsContent value="profile">

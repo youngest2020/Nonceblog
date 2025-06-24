@@ -4,7 +4,7 @@ import BlogHeader from "@/components/BlogHeader";
 import CommentsSection from "@/components/CommentsSection";
 import SocialMediaLinks from "@/components/SocialMediaLinks";
 import YouTubeModal from "@/components/YouTubeModal";
-import PromotionalPopup from "@/components/PromotionalPopup";
+import EnhancedPromotionalPopup from "@/components/EnhancedPromotionalPopup";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,9 +42,6 @@ const BlogPost = () => {
     url: '',
     title: ''
   });
-
-  // Load promotion settings
-  const promotionSettings = JSON.parse(localStorage.getItem('promotionSettings') || '{"isEnabled": false}');
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -324,8 +321,8 @@ const BlogPost = () => {
         title={youtubeModal.title}
       />
 
-      {/* Promotional Popup */}
-      <PromotionalPopup {...promotionSettings} />
+      {/* Enhanced Promotional Popup */}
+      <EnhancedPromotionalPopup currentPage="/post" />
     </div>
   );
 };
