@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,9 +9,11 @@ import { User, Heart, Share, MessageSquare } from "lucide-react";
 
 interface CommentsSectionProps {
   postId: string;
+  onLike?: () => void;
+  onShare?: () => void;
 }
 
-const CommentsSection = ({ postId }: CommentsSectionProps) => {
+const CommentsSection = ({ postId, onLike, onShare }: CommentsSectionProps) => {
   const { toast } = useToast();
   const [interactions, setInteractions] = useState(commentsStore.getPostInteractions(postId));
   const [newComment, setNewComment] = useState("");
@@ -25,6 +26,7 @@ const CommentsSection = ({ postId }: CommentsSectionProps) => {
       title: "Liked!",
       description: "You liked this post.",
     });
+    if (onLike) onLike();
   };
 
   const handleShare = () => {
@@ -43,6 +45,7 @@ const CommentsSection = ({ postId }: CommentsSectionProps) => {
         description: "Post link copied to clipboard.",
       });
     }
+    if (onShare) onShare();
   };
 
   const handleAddComment = () => {

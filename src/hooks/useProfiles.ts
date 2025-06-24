@@ -1,6 +1,4 @@
-
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 export interface Profile {
@@ -21,13 +19,10 @@ export const useProfiles = () => {
 
   const fetchProfiles = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setProfiles(data || []);
+      console.log('Mock: Fetching profiles from localStorage...');
+      const storedProfiles = localStorage.getItem('profiles');
+      const profiles = storedProfiles ? JSON.parse(storedProfiles) : [];
+      setProfiles(profiles);
     } catch (error: any) {
       console.error('Error fetching profiles:', error);
       toast({
@@ -42,27 +37,32 @@ export const useProfiles = () => {
 
   const createUser = async (userData: { email: string; password: string; displayName: string }) => {
     try {
-      // Create user account
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      console.log('Mock: Creating user:', userData.email);
+      
+      const newProfile: Profile = {
+        id: Date.now().toString(),
         email: userData.email,
-        password: userData.password,
-        email_confirm: true,
-        user_metadata: {
-          display_name: userData.displayName
-        }
-      });
+        display_name: userData.displayName,
+        profile_picture: '',
+        bio: '',
+        is_admin: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
 
-      if (authError) throw authError;
-
-      // The profile will be created automatically by the trigger
-      await fetchProfiles();
+      const storedProfiles = localStorage.getItem('profiles');
+      const profiles = storedProfiles ? JSON.parse(storedProfiles) : [];
+      profiles.push(newProfile);
+      localStorage.setItem('profiles', JSON.stringify(profiles));
+      
+      setProfiles(profiles);
 
       toast({
         title: "Success",
-        description: `User ${userData.displayName} created successfully!`,
+        description: `User ${userData.displayName} created successfully! (Mock implementation)`,
       });
 
-      return authData.user;
+      return { user: newProfile };
     } catch (error: any) {
       console.error('Error creating user:', error);
       toast({
@@ -76,13 +76,18 @@ export const useProfiles = () => {
 
   const deleteUser = async (userId: string) => {
     try {
-      const { error } = await supabase.auth.admin.deleteUser(userId);
-      if (error) throw error;
-
-      setProfiles(prev => prev.filter(profile => profile.id !== userId));
+      console.log('Mock: Deleting user:', userId);
+      
+      const storedProfiles = localStorage.getItem('profiles');
+      const profiles = storedProfiles ? JSON.parse(storedProfiles) : [];
+      const updatedProfiles = profiles.filter((profile: Profile) => profile.id !== userId);
+      localStorage.setItem('profiles', JSON.stringify(updatedProfiles));
+      
+      setProfiles(updatedProfiles);
+      
       toast({
         title: "Success",
-        description: "User deleted successfully",
+        description: "User deleted successfully (Mock implementation)",
       });
     } catch (error: any) {
       console.error('Error deleting user:', error);
