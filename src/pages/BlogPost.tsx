@@ -5,7 +5,7 @@ import CommentsSection from "@/components/CommentsSection";
 import SocialMediaLinks from "@/components/SocialMediaLinks";
 import YouTubeModal from "@/components/YouTubeModal";
 import EnhancedPromotionalPopup from "@/components/EnhancedPromotionalPopup";
-import { supabase } from "@/integrations/supabase/client";
+import { useBlogPosts } from "@/hooks/useBlogPosts";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ const BlogPost = () => {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const { trackPostEngagement } = useAnalytics();
+  const { posts } = useBlogPosts();
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -55,40 +56,18 @@ const BlogPost = () => {
       try {
         console.log('Fetching post with ID:', id);
         
-        // First try to fetch by ID
-        let { data, error } = await supabase
-          .from('blog_posts')
-          .select('*')
-          .eq('id', id)
-          .eq('is_published', true)
-          .single();
-
-        // If not found by ID, try by slug
-        if (error && error.code === 'PGRST116') {
-          console.log('Post not found by ID, trying by slug...');
-          const { data: slugData, error: slugError } = await supabase
-            .from('blog_posts')
-            .select('*')
-            .eq('slug', id)
-            .eq('is_published', true)
-            .single();
-          
-          data = slugData;
-          error = slugError;
-        }
-
-        if (error) {
-          console.error('Error fetching post:', error);
-          if (error.code === 'PGRST116') {
-            console.log('Post not found in database');
-          }
+        // Find post by ID or slug from the posts array
+        const foundPost = posts.find(p => p.id === id || p.slug === id);
+        
+        if (!foundPost || !foundPost.is_published) {
+          console.log('Post not found or not published');
           setPost(null);
         } else {
-          console.log('Post fetched successfully:', data);
-          setPost(data);
+          console.log('Post fetched successfully:', foundPost);
+          setPost(foundPost);
           
           // Track post view with enhanced analytics
-          await trackPostEngagement(data.id, 'view', {
+          await trackPostEngagement(foundPost.id, 'view', {
             timestamp: new Date().toISOString(),
             user_agent: navigator.userAgent,
             referrer: document.referrer,
@@ -109,7 +88,7 @@ const BlogPost = () => {
     };
 
     fetchPost();
-  }, [id, toast, trackPostEngagement]);
+  }, [id, posts, toast, trackPostEngagement]);
 
   const handleLike = async () => {
     if (post) {
