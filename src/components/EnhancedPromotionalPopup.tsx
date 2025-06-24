@@ -186,14 +186,6 @@ const EnhancedPromotionalPopup = ({ currentPage = '/' }: EnhancedPromotionalPopu
           >
             {currentPromotion.button_text}
           </Button>
-          
-          {/* Debug info in development */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-2 text-xs text-gray-400 border-t pt-2">
-              <div>ID: {currentPromotion.id}</div>
-              <div>Link: {currentPromotion.button_link}</div>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>
