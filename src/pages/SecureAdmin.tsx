@@ -11,7 +11,7 @@ import { Lock, Shield, Eye, EyeOff } from "lucide-react";
 const SecureAdmin = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { signIn } = useAuth();
+  const { signIn, loading: authLoading } = useAuth();
   const [credentials, setCredentials] = useState({
     email: "",
     password: ""
@@ -21,26 +21,33 @@ const SecureAdmin = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!credentials.email.trim() || !credentials.password) {
+      toast({
+        title: "Error",
+        description: "Please enter both email and password.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     
     try {
+      console.log('Starting login process...');
       await signIn(credentials.email.trim(), credentials.password);
       
-      toast({
-        title: "Success",
-        description: "Welcome to the admin panel!",
-      });
+      console.log('Login successful, navigating to admin...');
       navigate("/admin");
     } catch (error: any) {
-      toast({
-        title: "Login Failed",
-        description: error.message || "Unable to sign in. Please check your credentials.",
-        variant: "destructive",
-      });
+      console.error('Login failed:', error);
+      // Error is already handled in signIn function
     } finally {
       setLoading(false);
     }
   };
+
+  const isLoading = loading || authLoading;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-purple-700 flex items-center justify-center px-4">
@@ -65,7 +72,8 @@ const SecureAdmin = () => {
                 onChange={(e) => setCredentials(prev => ({ ...prev, email: e.target.value }))}
                 placeholder="Enter your admin email"
                 required
-                disabled={loading}
+                disabled={isLoading}
+                autoComplete="email"
               />
             </div>
             
@@ -80,7 +88,8 @@ const SecureAdmin = () => {
                   placeholder="Enter your password"
                   className="pr-10"
                   required
-                  disabled={loading}
+                  disabled={isLoading}
+                  autoComplete="current-password"
                 />
                 <Button
                   type="button"
@@ -88,7 +97,7 @@ const SecureAdmin = () => {
                   size="sm"
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
-                  disabled={loading}
+                  disabled={isLoading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4 text-gray-400" />
@@ -99,11 +108,21 @@ const SecureAdmin = () => {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={isLoading}>
               <Lock className="h-4 w-4 mr-2" />
-              {loading ? "Signing In..." : "Sign In"}
+              {isLoading ? "Signing In..." : "Sign In"}
             </Button>
           </form>
+
+          {/* Debug info in development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
+              <p><strong>Debug Info:</strong></p>
+              <p>Auth Loading: {authLoading ? 'Yes' : 'No'}</p>
+              <p>Form Loading: {loading ? 'Yes' : 'No'}</p>
+              <p>Email: {credentials.email}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -14,6 +14,8 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
   useEffect(() => {
     // Only redirect when we're not loading and have determined auth state
     if (!loading) {
+      console.log('ProtectedRoute check:', { user: !!user, profile: !!profile, isAdmin: profile?.is_admin, requireAdmin });
+      
       if (!user) {
         console.log('No user found, redirecting to secure-admin');
         navigate('/secure-admin', { replace: true });

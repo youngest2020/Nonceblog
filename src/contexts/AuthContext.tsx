@@ -23,9 +23,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Fetch user profile
-  const fetchProfile = async (userId: string) => {
+  // Fetch user profile with better error handling
+  const fetchProfile = async (userId: string): Promise<Profile | null> => {
     try {
+      console.log('Fetching profile for user:', userId);
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -34,34 +36,99 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         console.error('Error fetching profile:', error);
-        return null;
+        
+        // If profile doesn't exist, try to create it
+        if (error.code === 'PGRST116') {
+          console.log('Profile not found, attempting to create...');
+          return await createMissingProfile(userId);
+        }
+        
+        throw error;
       }
 
+      console.log('Profile fetched successfully:', data);
       return data;
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error in fetchProfile:', error);
       return null;
     }
   };
 
-  // Initialize auth state
+  // Create missing profile for existing user
+  const createMissingProfile = async (userId: string): Promise<Profile | null> => {
+    try {
+      console.log('Creating missing profile for user:', userId);
+      
+      // Get user data from auth
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !authUser) {
+        throw new Error('Could not get user data');
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert({
+          id: userId,
+          email: authUser.email,
+          display_name: authUser.user_metadata?.display_name || authUser.email,
+          is_admin: false
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('Profile created successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Error creating missing profile:', error);
+      return null;
+    }
+  };
+
+  // Initialize auth state with timeout protection
   useEffect(() => {
+    let mounted = true;
+    
     const initializeAuth = async () => {
       try {
+        console.log('Initializing auth...');
+        
+        // Set a timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+          if (mounted) {
+            console.warn('Auth initialization timeout, setting loading to false');
+            setLoading(false);
+          }
+        }, 10000); // 10 second timeout
+
         // Get initial session
         const { data: { session }, error } = await supabase.auth.getSession();
         
+        clearTimeout(timeoutId);
+        
         if (error) {
           console.error('Error getting session:', error);
-        } else if (session?.user) {
+        } else if (session?.user && mounted) {
+          console.log('Session found, setting user:', session.user.email);
           setUser(session.user);
+          
           const userProfile = await fetchProfile(session.user.id);
-          setProfile(userProfile);
+          if (mounted) {
+            setProfile(userProfile);
+          }
+        } else {
+          console.log('No active session found');
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -70,6 +137,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!mounted) return;
+        
         console.log('Auth state changed:', event, session?.user?.email);
         
         if (session?.user) {
@@ -85,7 +154,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -103,7 +175,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data.user) {
+        console.log('Sign in successful, fetching profile...');
         const userProfile = await fetchProfile(data.user.id);
+        
         if (!userProfile) {
           throw new Error('User profile not found. Please contact an administrator.');
         }
