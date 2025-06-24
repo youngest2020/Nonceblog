@@ -233,3 +233,5 @@ ON CONFLICT (id) DO NOTHING;`
 };
 
 export default StorageSetupGuide;
+
+export default StorageSetupGuide
