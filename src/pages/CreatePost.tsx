@@ -4,6 +4,7 @@ import BlogHeader from "@/components/BlogHeader";
 import EnhancedPostEditor from "@/components/EnhancedPostEditor";
 import { useAdminBlogPosts } from "@/hooks/useBlogPosts";
 import { uploadBlogImage, debugStorageSetup } from "@/lib/imageUpload";
+import { testStorageSetup, testImageUpload } from "@/lib/storageTest";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Image, AlertTriangle } from "lucide-react";
+import { Upload, Image, AlertTriangle, TestTube, CheckCircle, XCircle } from "lucide-react";
 
 const categories = [
   "Technology",
@@ -60,6 +61,8 @@ const CreatePost = () => {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [storageTestResult, setStorageTestResult] = useState<any>(null);
+  const [isTestingStorage, setIsTestingStorage] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,6 +171,67 @@ const CreatePost = () => {
     });
   };
 
+  const handleTestStorage = async () => {
+    setIsTestingStorage(true);
+    try {
+      const result = await testStorageSetup();
+      setStorageTestResult(result);
+      
+      if (result.success) {
+        toast({
+          title: "Storage Test Passed",
+          description: "Your storage setup is working correctly!",
+        });
+      } else {
+        toast({
+          title: "Storage Test Failed",
+          description: result.error,
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      setStorageTestResult({ success: false, error: error.message });
+      toast({
+        title: "Test Error",
+        description: "Failed to run storage test",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTestingStorage(false);
+    }
+  };
+
+  const handleTestImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    event.target.value = '';
+
+    try {
+      const result = await testImageUpload(file);
+      
+      if (result.success) {
+        toast({
+          title: "Image Upload Test Passed",
+          description: "Image uploaded successfully!",
+        });
+        console.log('Test image URL:', result.url);
+      } else {
+        toast({
+          title: "Image Upload Test Failed",
+          description: result.error,
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Test Error",
+        description: "Failed to test image upload",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <BlogHeader />
@@ -177,23 +241,88 @@ const CreatePost = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Post</h1>
           <p className="text-gray-600">Write and publish your blog post</p>
           
-          {/* Debug button for development */}
+          {/* Debug and Test Tools */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                <span className="text-sm font-medium text-yellow-800">Debug Tools</span>
+            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                <span className="font-medium text-yellow-800">Storage Debug & Test Tools</span>
               </div>
-              <Button 
-                type="button" 
-                variant="outline" 
-                size="sm"
-                onClick={handleDebugStorage}
-              >
-                Debug Storage Setup
-              </Button>
-              <p className="text-xs text-yellow-700 mt-1">
-                Click to check storage bucket configuration and permissions
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleDebugStorage}
+                >
+                  Debug Storage
+                </Button>
+                
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleTestStorage}
+                  disabled={isTestingStorage}
+                >
+                  <TestTube className="h-4 w-4 mr-2" />
+                  {isTestingStorage ? "Testing..." : "Test Storage"}
+                </Button>
+                
+                <div>
+                  <Label htmlFor="test-image-upload" className="cursor-pointer">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      className="cursor-pointer w-full"
+                      asChild
+                    >
+                      <span>
+                        <Image className="h-4 w-4 mr-2" />
+                        Test Image Upload
+                      </span>
+                    </Button>
+                  </Label>
+                  <Input
+                    id="test-image-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleTestImageUpload}
+                  />
+                </div>
+              </div>
+
+              {/* Test Results */}
+              {storageTestResult && (
+                <div className={`p-3 rounded-lg ${storageTestResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {storageTestResult.success ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-600" />
+                    )}
+                    <span className={`font-medium ${storageTestResult.success ? 'text-green-800' : 'text-red-800'}`}>
+                      Storage Test {storageTestResult.success ? 'Passed' : 'Failed'}
+                    </span>
+                  </div>
+                  <p className={`text-sm ${storageTestResult.success ? 'text-green-700' : 'text-red-700'}`}>
+                    {storageTestResult.success ? storageTestResult.message : storageTestResult.error}
+                  </p>
+                  {storageTestResult.bucketInfo && (
+                    <div className="mt-2 text-xs text-green-600">
+                      Bucket: {storageTestResult.bucketInfo.name} | 
+                      Public: {storageTestResult.bucketInfo.public ? 'Yes' : 'No'} | 
+                      Size Limit: {Math.round(storageTestResult.bucketInfo.file_size_limit / 1024 / 1024)}MB
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <p className="text-xs text-yellow-700 mt-2">
+                Use these tools to diagnose storage issues. Check the browser console for detailed logs.
               </p>
             </div>
           )}
