@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { ensureBlogImagesBucket } from './storageDiagnostic';
 
 export const uploadBlogImage = async (file: File): Promise<string> => {
   try {
@@ -45,8 +46,22 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
       });
     }
 
-    // 3. List all available buckets
-    console.log('3. Listing all storage buckets...');
+    // 3. Ensure blog-images bucket exists (auto-create if needed)
+    console.log('3. Ensuring blog-images bucket exists...');
+    const bucketResult = await ensureBlogImagesBucket();
+    if (!bucketResult.success) {
+      console.error('❌ Failed to ensure bucket exists:', bucketResult.error);
+      throw new Error(`Storage setup failed: ${bucketResult.error}`);
+    }
+    
+    if (bucketResult.created) {
+      console.log('✓ blog-images bucket was created automatically');
+    } else {
+      console.log('✓ blog-images bucket already exists');
+    }
+
+    // 4. List all available buckets for verification
+    console.log('4. Verifying storage access...');
     const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
     
     if (bucketsError) {
@@ -62,18 +77,18 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
       allowed_mime_types: b.allowed_mime_types
     })));
 
-    // 4. Check if blog-images bucket exists
+    // 5. Verify blog-images bucket exists
     const blogImagesBucket = buckets?.find(bucket => bucket.id === 'blog-images');
     if (!blogImagesBucket) {
-      console.error('❌ blog-images bucket not found!');
+      console.error('❌ blog-images bucket still not found after creation attempt!');
       console.log('Available bucket IDs:', buckets?.map(b => b.id));
-      throw new Error('Blog images storage bucket not found. Please create the "blog-images" bucket in your Supabase dashboard.');
+      throw new Error('Blog images storage bucket could not be created. Please check your Supabase permissions or create the "blog-images" bucket manually in your Supabase dashboard.');
     }
     
-    console.log('✓ blog-images bucket found:', blogImagesBucket);
+    console.log('✓ blog-images bucket confirmed:', blogImagesBucket);
 
-    // 5. Test bucket access by trying to list files
-    console.log('4. Testing bucket access...');
+    // 6. Test bucket access by trying to list files
+    console.log('5. Testing bucket access...');
     const { data: files, error: listError } = await supabase.storage
       .from('blog-images')
       .list('', { limit: 1 });
@@ -85,56 +100,58 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
     
     console.log('✓ Bucket access successful. Files count:', files?.length || 0);
 
-    // 6. Generate unique filename
+    // 7. Generate unique filename
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
     const filePath = fileName; // Store directly in bucket root
 
-    console.log('5. Uploading file:', { fileName, filePath });
+    console.log('6. Uploading file:', { fileName, filePath });
 
-    // 7. Upload the file
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('blog-images')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
+    // 8. Upload the file with retry logic
+    let uploadData;
+    let uploadError;
+    
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      console.log(`Upload attempt ${attempt}/3...`);
       
-      if (uploadError.message.includes('Duplicate')) {
-        // Retry with a different filename
-        const retryFileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        console.log('Retrying with filename:', retryFileName);
+      const currentFileName = attempt === 1 ? fileName : `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      
+      const result = await supabase.storage
+        .from('blog-images')
+        .upload(currentFileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (result.error) {
+        uploadError = result.error;
+        console.error(`Upload attempt ${attempt} failed:`, result.error);
         
-        const { data: retryData, error: retryError } = await supabase.storage
-          .from('blog-images')
-          .upload(retryFileName, file, {
-            cacheControl: '3600',
-            upsert: false
-          });
-          
-        if (retryError) {
-          console.error('Retry upload failed:', retryError);
-          throw new Error(`Upload failed: ${retryError.message}`);
+        if (result.error.message.includes('Duplicate') && attempt < 3) {
+          console.log('Retrying with different filename...');
+          continue;
         }
-        
-        const { data: retryUrlData } = supabase.storage
-          .from('blog-images')
-          .getPublicUrl(retryFileName);
-
-        console.log('✓ Image uploaded successfully (retry):', retryUrlData.publicUrl);
-        return retryUrlData.publicUrl;
+      } else {
+        uploadData = result.data;
+        uploadError = null;
+        console.log(`✓ Upload successful on attempt ${attempt}:`, uploadData.path);
+        break;
       }
-      
-      throw new Error(`Upload failed: ${uploadError.message}`);
     }
 
-    // 8. Get the public URL
+    if (uploadError) {
+      console.error('All upload attempts failed:', uploadError);
+      throw new Error(`Upload failed after 3 attempts: ${uploadError.message}`);
+    }
+
+    if (!uploadData) {
+      throw new Error('Upload failed: No data returned');
+    }
+
+    // 9. Get the public URL
     const { data: urlData } = supabase.storage
       .from('blog-images')
-      .getPublicUrl(filePath);
+      .getPublicUrl(uploadData.path);
 
     if (!urlData.publicUrl) {
       throw new Error('Failed to get public URL for uploaded image');
@@ -156,7 +173,7 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
       throw new Error('Network error. Please check your connection and try again.');
     }
     if (error.message.includes('bucket')) {
-      throw new Error('Storage configuration error. Please contact support.');
+      throw new Error('Storage configuration error. The blog-images bucket could not be accessed or created. Please try using the "Create Bucket" button in the diagnostic tools.');
     }
     
     throw error;

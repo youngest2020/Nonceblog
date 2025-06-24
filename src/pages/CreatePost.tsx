@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Image, AlertTriangle, TestTube, CheckCircle, XCircle, Wrench, Plus } from "lucide-react";
+import { Upload, Image, AlertTriangle, TestTube, CheckCircle, XCircle, Wrench, Plus, RefreshCw } from "lucide-react";
 
 const categories = [
   "Technology",
@@ -155,11 +155,21 @@ const CreatePost = () => {
       });
     } catch (error: any) {
       console.error('Featured image upload failed:', error);
-      toast({
-        title: "Upload Failed",
-        description: error.message || "Failed to upload image. Please try again.",
-        variant: "destructive",
-      });
+      
+      // Check if it's a bucket-related error and suggest using the diagnostic tools
+      if (error.message.includes('bucket') || error.message.includes('storage')) {
+        toast({
+          title: "Storage Setup Required",
+          description: "The blog-images storage bucket needs to be created. Please use the 'Create Bucket' button below.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Upload Failed",
+          description: error.message || "Failed to upload image. Please try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsUploading(false);
     }
@@ -202,8 +212,10 @@ const CreatePost = () => {
       
       if (result.success) {
         toast({
-          title: "Bucket Created",
-          description: "blog-images bucket created successfully!",
+          title: "Success",
+          description: result.alreadyExists 
+            ? "blog-images bucket already exists!" 
+            : "blog-images bucket created successfully!",
         });
         // Re-run diagnostic to verify
         await handleRunDiagnostic();
@@ -213,6 +225,14 @@ const CreatePost = () => {
           description: result.error,
           variant: "destructive",
         });
+        
+        // Show additional help if it's a permission issue
+        if (result.suggestion) {
+          toast({
+            title: "Suggestion",
+            description: result.suggestion,
+          });
+        }
       }
     } catch (error: any) {
       toast({
@@ -243,6 +263,47 @@ const CreatePost = () => {
     }
   };
 
+  const handleQuickFix = async () => {
+    setIsCreatingBucket(true);
+    try {
+      // First try to create the bucket
+      const createResult = await createBlogImagesBucket();
+      
+      if (createResult.success) {
+        // Then run diagnostic to verify everything works
+        const diagnosticResult = await runStorageDiagnostic();
+        setDiagnosticResult(diagnosticResult);
+        
+        if (diagnosticResult.success) {
+          toast({
+            title: "Quick Fix Complete",
+            description: "Storage is now ready for image uploads!",
+          });
+        } else {
+          toast({
+            title: "Bucket Created",
+            description: "Bucket created but there may be permission issues. Check diagnostic results.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Quick Fix Failed",
+          description: createResult.error,
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Quick fix failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingBucket(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <BlogHeader />
@@ -253,13 +314,25 @@ const CreatePost = () => {
           <p className="text-gray-600">Write and publish your blog post</p>
           
           {/* Enhanced Debug and Test Tools */}
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="h-5 w-5 text-red-600" />
-              <span className="font-medium text-red-800">Storage Diagnostic & Fix Tools</span>
+              <AlertTriangle className="h-5 w-5 text-blue-600" />
+              <span className="font-medium text-blue-800">Storage Setup & Diagnostic Tools</span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+              <Button 
+                type="button" 
+                variant="default" 
+                size="sm"
+                onClick={handleQuickFix}
+                disabled={isCreatingBucket}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                {isCreatingBucket ? "Fixing..." : "Quick Fix"}
+              </Button>
+              
               <Button 
                 type="button" 
                 variant="outline" 
@@ -331,6 +404,15 @@ const CreatePost = () => {
                   
                   {!diagnosticResult.success && (
                     <div className="space-y-2">
+                      {diagnosticResult.canCreateBucket && (
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="font-medium text-blue-800 mb-2">🔧 Quick Solution:</p>
+                          <p className="text-blue-700 text-sm">
+                            Click the "Quick Fix" button above to automatically create the blog-images bucket and verify the setup.
+                          </p>
+                        </div>
+                      )}
+                      
                       {diagnosticResult.availableBuckets && (
                         <div>
                           <p className="font-medium">Available buckets:</p>
@@ -376,8 +458,9 @@ const CreatePost = () => {
               </div>
             )}
             
-            <p className="text-xs text-red-700 mt-2">
-              Run the diagnostic to identify storage issues. Check the browser console for detailed logs.
+            <p className="text-xs text-blue-700 mt-2">
+              💡 <strong>Quick Fix</strong> will automatically create the bucket and verify setup. 
+              Use <strong>Full Diagnostic</strong> for detailed troubleshooting. Check browser console for detailed logs.
             </p>
           </div>
         </div>
