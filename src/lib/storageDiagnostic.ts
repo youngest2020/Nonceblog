@@ -116,15 +116,18 @@ export const runStorageDiagnostic = async () => {
       }
     }
 
-    // 6. Test upload with a tiny test file
+    // 6. Test upload with a tiny test image (1x1 transparent GIF)
     console.log('6. Testing file upload...');
-    const testContent = `Test upload at ${new Date().toISOString()}`;
-    const testBlob = new Blob([testContent], { type: 'text/plain' });
-    const testFileName = `diagnostic-test-${Date.now()}.txt`;
+    // Create a minimal 1x1 transparent GIF as base64
+    const transparentGifBase64 = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    const testImageBlob = new Blob([Uint8Array.from(atob(transparentGifBase64), c => c.charCodeAt(0))], { 
+      type: 'image/gif' 
+    });
+    const testFileName = `diagnostic-test-${Date.now()}.gif`;
     
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('blog-images')
-      .upload(testFileName, testBlob, {
+      .upload(testFileName, testImageBlob, {
         cacheControl: '3600',
         upsert: false
       });
@@ -258,10 +261,14 @@ export const fixStoragePermissions = async () => {
       tests.push({ operation: 'listFiles', success: false, error: error.message });
     }
 
-    // Test 3: Upload test
+    // Test 3: Upload test with proper image format
     try {
-      const testBlob = new Blob(['test'], { type: 'text/plain' });
-      await supabase.storage.from('blog-images').upload(`test-${Date.now()}.txt`, testBlob);
+      // Use a 1x1 transparent GIF for testing
+      const transparentGifBase64 = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      const testBlob = new Blob([Uint8Array.from(atob(transparentGifBase64), c => c.charCodeAt(0))], { 
+        type: 'image/gif' 
+      });
+      await supabase.storage.from('blog-images').upload(`test-${Date.now()}.gif`, testBlob);
       tests.push({ operation: 'upload', success: true });
     } catch (error: any) {
       tests.push({ operation: 'upload', success: false, error: error.message });
