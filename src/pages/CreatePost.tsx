@@ -5,6 +5,7 @@ import EnhancedPostEditor from "@/components/EnhancedPostEditor";
 import { useAdminBlogPosts } from "@/hooks/useBlogPosts";
 import { uploadBlogImage, debugStorageSetup } from "@/lib/imageUpload";
 import { testStorageSetup, testImageUpload } from "@/lib/storageTest";
+import { runStorageDiagnostic, createBlogImagesBucket, fixStoragePermissions } from "@/lib/storageDiagnostic";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Image, AlertTriangle, TestTube, CheckCircle, XCircle } from "lucide-react";
+import { Upload, Image, AlertTriangle, TestTube, CheckCircle, XCircle, Wrench, Plus } from "lucide-react";
 
 const categories = [
   "Technology",
@@ -61,8 +62,9 @@ const CreatePost = () => {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [storageTestResult, setStorageTestResult] = useState<any>(null);
-  const [isTestingStorage, setIsTestingStorage] = useState(false);
+  const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
+  const [isRunningDiagnostic, setIsRunningDiagnostic] = useState(false);
+  const [isCreatingBucket, setIsCreatingBucket] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,70 +165,79 @@ const CreatePost = () => {
     }
   };
 
-  const handleDebugStorage = async () => {
-    await debugStorageSetup();
-    toast({
-      title: "Debug Complete",
-      description: "Check the browser console for storage debug information.",
-    });
-  };
-
-  const handleTestStorage = async () => {
-    setIsTestingStorage(true);
+  const handleRunDiagnostic = async () => {
+    setIsRunningDiagnostic(true);
     try {
-      const result = await testStorageSetup();
-      setStorageTestResult(result);
+      const result = await runStorageDiagnostic();
+      setDiagnosticResult(result);
       
       if (result.success) {
         toast({
-          title: "Storage Test Passed",
-          description: "Your storage setup is working correctly!",
+          title: "Diagnostic Complete",
+          description: "Storage setup is working correctly!",
         });
       } else {
         toast({
-          title: "Storage Test Failed",
+          title: "Diagnostic Found Issues",
           description: result.error,
           variant: "destructive",
         });
       }
     } catch (error: any) {
-      setStorageTestResult({ success: false, error: error.message });
+      setDiagnosticResult({ success: false, error: error.message });
       toast({
-        title: "Test Error",
-        description: "Failed to run storage test",
+        title: "Diagnostic Error",
+        description: "Failed to run diagnostic",
         variant: "destructive",
       });
     } finally {
-      setIsTestingStorage(false);
+      setIsRunningDiagnostic(false);
     }
   };
 
-  const handleTestImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    event.target.value = '';
-
+  const handleCreateBucket = async () => {
+    setIsCreatingBucket(true);
     try {
-      const result = await testImageUpload(file);
+      const result = await createBlogImagesBucket();
       
       if (result.success) {
         toast({
-          title: "Image Upload Test Passed",
-          description: "Image uploaded successfully!",
+          title: "Bucket Created",
+          description: "blog-images bucket created successfully!",
         });
-        console.log('Test image URL:', result.url);
+        // Re-run diagnostic to verify
+        await handleRunDiagnostic();
       } else {
         toast({
-          title: "Image Upload Test Failed",
+          title: "Failed to Create Bucket",
           description: result.error,
           variant: "destructive",
         });
       }
     } catch (error: any) {
       toast({
-        title: "Test Error",
-        description: "Failed to test image upload",
+        title: "Error",
+        description: "Failed to create bucket",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingBucket(false);
+    }
+  };
+
+  const handleFixPermissions = async () => {
+    try {
+      const result = await fixStoragePermissions();
+      console.log('Permission check results:', result);
+      
+      toast({
+        title: "Permission Check Complete",
+        description: "Check the browser console for detailed results",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to check permissions",
         variant: "destructive",
       });
     }
@@ -241,91 +252,134 @@ const CreatePost = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Post</h1>
           <p className="text-gray-600">Write and publish your blog post</p>
           
-          {/* Debug and Test Tools */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                <span className="font-medium text-yellow-800">Storage Debug & Test Tools</span>
-              </div>
+          {/* Enhanced Debug and Test Tools */}
+          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              <span className="font-medium text-red-800">Storage Diagnostic & Fix Tools</span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={handleRunDiagnostic}
+                disabled={isRunningDiagnostic}
+              >
+                <TestTube className="h-4 w-4 mr-2" />
+                {isRunningDiagnostic ? "Running..." : "Full Diagnostic"}
+              </Button>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleDebugStorage}
-                >
-                  Debug Storage
-                </Button>
-                
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleTestStorage}
-                  disabled={isTestingStorage}
-                >
-                  <TestTube className="h-4 w-4 mr-2" />
-                  {isTestingStorage ? "Testing..." : "Test Storage"}
-                </Button>
-                
-                <div>
-                  <Label htmlFor="test-image-upload" className="cursor-pointer">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm"
-                      className="cursor-pointer w-full"
-                      asChild
-                    >
-                      <span>
-                        <Image className="h-4 w-4 mr-2" />
-                        Test Image Upload
-                      </span>
-                    </Button>
-                  </Label>
-                  <Input
-                    id="test-image-upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleTestImageUpload}
-                  />
-                </div>
-              </div>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={handleCreateBucket}
+                disabled={isCreatingBucket}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {isCreatingBucket ? "Creating..." : "Create Bucket"}
+              </Button>
+              
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={handleFixPermissions}
+              >
+                <Wrench className="h-4 w-4 mr-2" />
+                Check Permissions
+              </Button>
+              
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={debugStorageSetup}
+              >
+                Debug Storage
+              </Button>
+            </div>
 
-              {/* Test Results */}
-              {storageTestResult && (
-                <div className={`p-3 rounded-lg ${storageTestResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {storageTestResult.success ? (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-600" />
-                    )}
-                    <span className={`font-medium ${storageTestResult.success ? 'text-green-800' : 'text-red-800'}`}>
-                      Storage Test {storageTestResult.success ? 'Passed' : 'Failed'}
-                    </span>
-                  </div>
-                  <p className={`text-sm ${storageTestResult.success ? 'text-green-700' : 'text-red-700'}`}>
-                    {storageTestResult.success ? storageTestResult.message : storageTestResult.error}
+            {/* Diagnostic Results */}
+            {diagnosticResult && (
+              <div className={`p-4 rounded-lg border ${
+                diagnosticResult.success 
+                  ? 'bg-green-50 border-green-200' 
+                  : 'bg-red-50 border-red-200'
+              }`}>
+                <div className="flex items-center gap-2 mb-3">
+                  {diagnosticResult.success ? (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-red-600" />
+                  )}
+                  <span className={`font-medium ${
+                    diagnosticResult.success ? 'text-green-800' : 'text-red-800'
+                  }`}>
+                    Diagnostic {diagnosticResult.success ? 'Passed' : 'Failed'}
+                  </span>
+                </div>
+                
+                <div className={`text-sm ${
+                  diagnosticResult.success ? 'text-green-700' : 'text-red-700'
+                }`}>
+                  <p className="font-medium mb-2">
+                    {diagnosticResult.success ? diagnosticResult.message : diagnosticResult.error}
                   </p>
-                  {storageTestResult.bucketInfo && (
-                    <div className="mt-2 text-xs text-green-600">
-                      Bucket: {storageTestResult.bucketInfo.name} | 
-                      Public: {storageTestResult.bucketInfo.public ? 'Yes' : 'No'} | 
-                      Size Limit: {Math.round(storageTestResult.bucketInfo.file_size_limit / 1024 / 1024)}MB
+                  
+                  {!diagnosticResult.success && (
+                    <div className="space-y-2">
+                      {diagnosticResult.availableBuckets && (
+                        <div>
+                          <p className="font-medium">Available buckets:</p>
+                          <ul className="list-disc list-inside ml-4">
+                            {diagnosticResult.availableBuckets.map((bucket: any) => (
+                              <li key={bucket.id}>
+                                {bucket.id} {bucket.public ? '(public)' : '(private)'}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {diagnosticResult.similarBuckets && diagnosticResult.similarBuckets.length > 0 && (
+                        <div>
+                          <p className="font-medium">Similar buckets found:</p>
+                          <ul className="list-disc list-inside ml-4">
+                            {diagnosticResult.similarBuckets.map((bucket: any) => (
+                              <li key={bucket.id}>
+                                {bucket.id} {bucket.public ? '(public)' : '(private)'}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {diagnosticResult.suggestion && (
+                        <p className="font-medium text-blue-700">
+                          💡 {diagnosticResult.suggestion}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {diagnosticResult.bucketInfo && (
+                    <div className="mt-2 text-xs">
+                      <p>Bucket: {diagnosticResult.bucketInfo.name}</p>
+                      <p>Public: {diagnosticResult.bucketInfo.public ? 'Yes' : 'No'}</p>
+                      <p>Size Limit: {Math.round((diagnosticResult.bucketInfo.file_size_limit || 0) / 1024 / 1024)}MB</p>
                     </div>
                   )}
                 </div>
-              )}
-              
-              <p className="text-xs text-yellow-700 mt-2">
-                Use these tools to diagnose storage issues. Check the browser console for detailed logs.
-              </p>
-            </div>
-          )}
+              </div>
+            )}
+            
+            <p className="text-xs text-red-700 mt-2">
+              Run the diagnostic to identify storage issues. Check the browser console for detailed logs.
+            </p>
+          </div>
         </div>
 
         <Card>
