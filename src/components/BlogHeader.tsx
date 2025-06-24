@@ -1,4 +1,3 @@
-
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X, LogOut } from "lucide-react";
@@ -33,9 +32,14 @@ const BlogHeader = () => {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-4">
             {!isAdminPath ? (
-              <Link to="/" className="text-gray-700 hover:text-blue-600 transition-colors">
-                Home
-              </Link>
+              <>
+                <Link to="/" className="text-gray-700 hover:text-blue-600 transition-colors">
+                  Home
+                </Link>
+                <Link to="/about" className="text-gray-700 hover:text-blue-600 transition-colors">
+                  About
+                </Link>
+              </>
             ) : (
               <>
                 <Link to="/admin" className="text-gray-700 hover:text-blue-600 transition-colors">
@@ -76,13 +80,22 @@ const BlogHeader = () => {
           <div className="md:hidden py-4 border-t border-gray-200">
             <nav className="flex flex-col space-y-3">
               {!isAdminPath ? (
-                <Link 
-                  to="/" 
-                  className="text-gray-700 hover:text-blue-600 transition-colors px-2 py-1"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Home
-                </Link>
+                <>
+                  <Link 
+                    to="/" 
+                    className="text-gray-700 hover:text-blue-600 transition-colors px-2 py-1"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Home
+                  </Link>
+                  <Link 
+                    to="/about" 
+                    className="text-gray-700 hover:text-blue-600 transition-colors px-2 py-1"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    About
+                  </Link>
+                </>
               ) : (
                 <>
                   <Link 
