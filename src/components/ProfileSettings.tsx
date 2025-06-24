@@ -41,6 +41,41 @@ const ProfileSettings = () => {
     }
   };
 
+  const ensureAvatarsBucket = async () => {
+    try {
+      // Check if bucket exists
+      const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+      
+      if (listError) {
+        console.error('Error listing buckets:', listError);
+        return false;
+      }
+
+      const avatarsBucket = buckets?.find(bucket => bucket.name === 'avatars');
+      
+      if (!avatarsBucket) {
+        // Try to create the bucket
+        const { error: createError } = await supabase.storage.createBucket('avatars', {
+          public: true,
+          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+          fileSizeLimit: 5242880 // 5MB
+        });
+
+        if (createError) {
+          console.error('Error creating avatars bucket:', createError);
+          return false;
+        }
+        
+        console.log('Avatars bucket created successfully');
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error ensuring avatars bucket:', error);
+      return false;
+    }
+  };
+
   const handleProfilePictureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -65,15 +100,26 @@ const ProfileSettings = () => {
 
     setIsUploading(true);
     try {
+      console.log('Ensuring avatars bucket exists...');
+      
+      // Ensure the avatars bucket exists
+      const bucketReady = await ensureAvatarsBucket();
+      if (!bucketReady) {
+        throw new Error('Failed to create or access avatars bucket. Please contact support.');
+      }
+
       console.log('Uploading profile picture to Supabase Storage...');
       
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}-${Math.random()}.${fileExt}`;
-      const filePath = `profile-pictures/${fileName}`;
+      const filePath = `${user.id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
 
       if (uploadError) {
         throw uploadError;
