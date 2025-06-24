@@ -8,9 +8,12 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { usePromotions, Promotion } from "@/hooks/usePromotions";
+import { usePromotions } from "@/hooks/usePromotions";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Edit, Trash2, Eye, BarChart3, Calendar, Target, Settings } from "lucide-react";
+import type { Database } from "@/integrations/supabase/types";
+
+type Promotion = Database['public']['Tables']['promotions']['Row'];
 
 const EnhancedPromotionSettings = () => {
   const { promotions, loading, createPromotion, updatePromotion, deletePromotion } = usePromotions();
@@ -62,19 +65,20 @@ const EnhancedPromotionSettings = () => {
   };
 
   const handleEdit = (promotion: Promotion) => {
+    const rules = promotion.display_rules as any || {};
     setFormData({
       title: promotion.title,
       message: promotion.message,
       button_text: promotion.button_text,
       button_link: promotion.button_link,
-      is_active: promotion.is_active,
+      is_active: promotion.is_active || false,
       display_rules: {
-        pages: promotion.display_rules?.pages || [],
-        delay_seconds: promotion.display_rules?.delay_seconds || 10,
-        show_frequency: promotion.display_rules?.show_frequency || 'session',
-        target_audience: promotion.display_rules?.target_audience || 'all',
-        start_date: promotion.display_rules?.start_date || '',
-        end_date: promotion.display_rules?.end_date || ''
+        pages: rules.pages || [],
+        delay_seconds: rules.delay_seconds || 10,
+        show_frequency: rules.show_frequency || 'session',
+        target_audience: rules.target_audience || 'all',
+        start_date: rules.start_date || '',
+        end_date: rules.end_date || ''
       }
     });
     setEditingPromotion(promotion);
@@ -94,10 +98,19 @@ const EnhancedPromotionSettings = () => {
     }
 
     try {
+      const promotionData = {
+        title: formData.title,
+        message: formData.message,
+        button_text: formData.button_text,
+        button_link: formData.button_link,
+        is_active: formData.is_active,
+        display_rules: formData.display_rules
+      };
+
       if (editingPromotion) {
-        await updatePromotion(editingPromotion.id, formData);
+        await updatePromotion(editingPromotion.id, promotionData);
       } else {
-        await createPromotion(formData);
+        await createPromotion(promotionData);
       }
       resetForm();
     } catch (error) {
@@ -195,16 +208,8 @@ const EnhancedPromotionSettings = () => {
                           <p className="text-gray-600 text-sm mb-2">{promotion.message}</p>
                           <div className="flex items-center gap-4 text-xs text-gray-500">
                             <span className="flex items-center gap-1">
-                              <Eye className="h-3 w-3" />
-                              {promotion.analytics.views} views
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <BarChart3 className="h-3 w-3" />
-                              {promotion.analytics.clicks} clicks
-                            </span>
-                            <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              {formatDate(promotion.created_at)}
+                              {formatDate(promotion.created_at || '')}
                             </span>
                           </div>
                         </div>
@@ -228,16 +233,16 @@ const EnhancedPromotionSettings = () => {
                       
                       {/* Display Rules Summary */}
                       <div className="flex flex-wrap gap-2">
-                        {promotion.display_rules?.pages && promotion.display_rules.pages.length > 0 && (
+                        {(promotion.display_rules as any)?.pages && (promotion.display_rules as any).pages.length > 0 && (
                           <Badge variant="outline" className="text-xs">
-                            Pages: {promotion.display_rules.pages.join(', ')}
+                            Pages: {(promotion.display_rules as any).pages.join(', ')}
                           </Badge>
                         )}
                         <Badge variant="outline" className="text-xs">
-                          Frequency: {promotion.display_rules?.show_frequency || 'session'}
+                          Frequency: {(promotion.display_rules as any)?.show_frequency || 'session'}
                         </Badge>
                         <Badge variant="outline" className="text-xs">
-                          Target: {promotion.display_rules?.target_audience || 'all'}
+                          Target: {(promotion.display_rules as any)?.target_audience || 'all'}
                         </Badge>
                       </div>
                     </div>
@@ -252,26 +257,10 @@ const EnhancedPromotionSettings = () => {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-gray-600">Total Views</p>
-                        <p className="text-2xl font-bold">
-                          {promotions.reduce((sum, p) => sum + p.analytics.views, 0)}
-                        </p>
+                        <p className="text-sm text-gray-600">Total Promotions</p>
+                        <p className="text-2xl font-bold">{promotions.length}</p>
                       </div>
-                      <Eye className="h-8 w-8 text-blue-600" />
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-600">Total Clicks</p>
-                        <p className="text-2xl font-bold">
-                          {promotions.reduce((sum, p) => sum + p.analytics.clicks, 0)}
-                        </p>
-                      </div>
-                      <BarChart3 className="h-8 w-8 text-green-600" />
+                      <Target className="h-8 w-8 text-purple-600" />
                     </div>
                   </CardContent>
                 </Card>
@@ -285,7 +274,21 @@ const EnhancedPromotionSettings = () => {
                           {promotions.filter(p => p.is_active).length}
                         </p>
                       </div>
-                      <Target className="h-8 w-8 text-purple-600" />
+                      <Eye className="h-8 w-8 text-green-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Inactive Promotions</p>
+                        <p className="text-2xl font-bold">
+                          {promotions.filter(p => !p.is_active).length}
+                        </p>
+                      </div>
+                      <BarChart3 className="h-8 w-8 text-gray-600" />
                     </div>
                   </CardContent>
                 </Card>

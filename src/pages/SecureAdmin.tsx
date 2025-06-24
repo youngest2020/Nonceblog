@@ -24,21 +24,14 @@ const SecureAdmin = () => {
     setLoading(true);
     
     try {
-      console.log("=== MOCK LOGIN ATTEMPT ===");
-      console.log("Email being used:", credentials.email);
-      
       await signIn(credentials.email.trim(), credentials.password);
       
-      console.log("Mock login successful");
       toast({
         title: "Success",
         description: "Welcome to the admin panel!",
       });
       navigate("/admin");
     } catch (error: any) {
-      console.error("=== MOCK LOGIN ERROR ===");
-      console.error("Error message:", error.message);
-      
       toast({
         title: "Login Failed",
         description: error.message || "Unable to sign in. Please check your credentials.",
@@ -58,18 +51,10 @@ const SecureAdmin = () => {
               <Shield className="h-8 w-8 text-blue-600" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Admin Access (Mock)</CardTitle>
-          <p className="text-gray-600">Mock login to Nonce Firewall Blogs admin panel</p>
+          <CardTitle className="text-2xl font-bold">Admin Access</CardTitle>
+          <p className="text-gray-600">Sign in to Nonce Firewall Blogs admin panel</p>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm text-blue-800">
-              <strong>Mock Credentials:</strong><br />
-              Email: admin@noncefirewall.com<br />
-              Password: admin123
-            </p>
-          </div>
-          
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
@@ -116,13 +101,9 @@ const SecureAdmin = () => {
 
             <Button type="submit" className="w-full" disabled={loading}>
               <Lock className="h-4 w-4 mr-2" />
-              {loading ? "Signing In..." : "Sign In (Mock)"}
+              {loading ? "Signing In..." : "Sign In"}
             </Button>
           </form>
-          
-          <div className="mt-4 text-center text-sm text-gray-600">
-            <p>This is a mock authentication system. No real authentication is performed.</p>
-          </div>
         </CardContent>
       </Card>
     </div>

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Mail, User, Eye, EyeOff } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -23,24 +24,56 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      console.log('Mock sign up:', formData);
+      console.log('Creating account with Supabase...');
       
-      // Mock sign up - just show success message
-      toast({
-        title: "Success",
-        description: "Account created successfully! This is a mock implementation.",
+      // Sign up with Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email.trim(),
+        password: formData.password,
+        options: {
+          data: {
+            display_name: formData.displayName.trim()
+          }
+        }
       });
-      
-      // Reset form
-      setFormData({
-        email: "",
-        password: "",
-        displayName: ""
-      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.user) {
+        // Create profile record
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            email: formData.email.trim(),
+            display_name: formData.displayName.trim(),
+            is_admin: false
+          });
+
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+          // Don't throw here as the user was created successfully
+        }
+
+        toast({
+          title: "Success",
+          description: "Account created successfully! Please check your email to verify your account.",
+        });
+        
+        // Reset form
+        setFormData({
+          email: "",
+          password: "",
+          displayName: ""
+        });
+      }
     } catch (error: any) {
+      console.error('Sign up error:', error);
       toast({
         title: "Error",
-        description: error.message || "An error occurred",
+        description: error.message || "An error occurred during sign up",
         variant: "destructive",
       });
     } finally {
@@ -57,16 +90,10 @@ const Auth = () => {
               <UserPlus className="h-8 w-8 text-blue-600" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Create Account (Mock)</CardTitle>
+          <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
           <p className="text-gray-600">Join our community</p>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm text-blue-800">
-              This is a mock sign-up form. No real account will be created.
-            </p>
-          </div>
-          
           <form onSubmit={handleSignUp} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="displayName">Display Name</Label>
@@ -80,6 +107,7 @@ const Auth = () => {
                   placeholder="Your display name"
                   className="pl-10"
                   required
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -96,6 +124,7 @@ const Auth = () => {
                   placeholder="your@email.com"
                   className="pl-10"
                   required
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -111,6 +140,8 @@ const Auth = () => {
                   placeholder="Enter your password"
                   className="pr-10"
                   required
+                  disabled={loading}
+                  minLength={6}
                 />
                 <Button
                   type="button"
@@ -118,6 +149,7 @@ const Auth = () => {
                   size="sm"
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4 text-gray-400" />
@@ -126,10 +158,11 @@ const Auth = () => {
                   )}
                 </Button>
               </div>
+              <p className="text-xs text-gray-500">Password must be at least 6 characters long</p>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Creating Account..." : "Create Account (Mock)"}
+              {loading ? "Creating Account..." : "Create Account"}
             </Button>
           </form>
           
@@ -141,6 +174,7 @@ const Auth = () => {
               variant="link"
               onClick={() => navigate('/secure-admin')}
               className="text-sm font-medium"
+              disabled={loading}
             >
               Go to Admin Login
             </Button>
