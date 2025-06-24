@@ -3,30 +3,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import { usePromotions } from "@/hooks/usePromotions";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 interface EnhancedPromotionalPopupProps {
   currentPage?: string;
 }
 
 const EnhancedPromotionalPopup = ({ currentPage = '/' }: EnhancedPromotionalPopupProps) => {
-  const { getActivePromotions, trackPromotionView, trackPromotionClick } = usePromotions();
+  const { getActivePromotions } = usePromotions();
+  const { trackPromotionEngagement } = useAnalytics();
   const [currentPromotion, setCurrentPromotion] = useState<any>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
 
-  // Generate or get visitor ID
-  const getVisitorId = () => {
-    let visitorId = localStorage.getItem('visitor_id');
-    if (!visitorId) {
-      visitorId = 'visitor_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('visitor_id', visitorId);
-    }
-    return visitorId;
-  };
-
   // Check if promotion should be shown based on frequency rules
   const shouldShowPromotion = (promotion: any) => {
-    const visitorId = getVisitorId();
     const frequency = promotion.display_rules?.show_frequency || 'session';
     const storageKey = `promotion_${promotion.id}_${frequency}`;
     
@@ -104,9 +95,13 @@ const EnhancedPromotionalPopup = ({ currentPage = '/' }: EnhancedPromotionalPopu
     setIsVisible(true);
     markPromotionShown(promotion);
     
-    // Track view
-    const visitorId = getVisitorId();
-    await trackPromotionView(promotion.id, visitorId);
+    // Track view with enhanced analytics
+    await trackPromotionEngagement(promotion.id, 'view', {
+      page: currentPage,
+      timestamp: new Date().toISOString(),
+      user_agent: navigator.userAgent,
+      referrer: document.referrer
+    });
   };
 
   const handleClick = async () => {
@@ -116,9 +111,14 @@ const EnhancedPromotionalPopup = ({ currentPage = '/' }: EnhancedPromotionalPopu
       console.log('🌐 Opening external link:', currentPromotion.button_link);
       
       try {
-        // Track the click first
-        const visitorId = getVisitorId();
-        await trackPromotionClick(currentPromotion.id, visitorId);
+        // Track the click with enhanced analytics
+        await trackPromotionEngagement(currentPromotion.id, 'click', {
+          page: currentPage,
+          timestamp: new Date().toISOString(),
+          target_url: currentPromotion.button_link,
+          user_agent: navigator.userAgent
+        });
+        
         console.log('✅ Click tracked successfully');
         
         // Validate URL format
@@ -153,8 +153,18 @@ const EnhancedPromotionalPopup = ({ currentPage = '/' }: EnhancedPromotionalPopu
     }
   };
 
-  const handleClose = () => {
+  const handleClose = async () => {
     console.log('❌ Promotional popup closed by user');
+    
+    // Track close event
+    if (currentPromotion) {
+      await trackPromotionEngagement(currentPromotion.id, 'close', {
+        page: currentPage,
+        timestamp: new Date().toISOString(),
+        action: 'manual_close'
+      });
+    }
+    
     setIsVisible(false);
   };
 
@@ -162,30 +172,41 @@ const EnhancedPromotionalPopup = ({ currentPage = '/' }: EnhancedPromotionalPopu
 
   return (
     <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-4">
-      <Card className="w-80 shadow-lg border-2 border-blue-200">
+      <Card className="w-80 shadow-lg border-2 border-blue-200 bg-gradient-to-br from-white to-blue-50">
         <CardContent className="p-4">
           <div className="flex justify-between items-start mb-3">
-            <h3 className="font-semibold text-gray-900">{currentPromotion.title}</h3>
+            <h3 className="font-semibold text-gray-900 text-lg leading-tight">
+              {currentPromotion.title}
+            </h3>
             <Button
               variant="ghost"
               size="sm"
               onClick={handleClose}
-              className="h-6 w-6 p-0"
+              className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
           
-          <p className="text-sm text-gray-600 mb-4">{currentPromotion.message}</p>
+          <p className="text-sm text-gray-700 mb-4 leading-relaxed">
+            {currentPromotion.message}
+          </p>
           
           <Button 
-            className="w-full" 
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium shadow-md hover:shadow-lg transition-all duration-200" 
             size="sm"
             onClick={handleClick}
             disabled={!currentPromotion.button_link}
           >
             {currentPromotion.button_text}
           </Button>
+          
+          {/* Analytics indicator (only visible in development) */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-2 text-xs text-gray-400 text-center">
+              Analytics: Tracking enabled
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

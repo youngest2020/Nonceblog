@@ -6,6 +6,7 @@ import SocialMediaLinks from "@/components/SocialMediaLinks";
 import YouTubeModal from "@/components/YouTubeModal";
 import EnhancedPromotionalPopup from "@/components/EnhancedPromotionalPopup";
 import { supabase } from "@/integrations/supabase/client";
+import { useAnalytics } from "@/hooks/useAnalytics";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -34,6 +35,7 @@ interface BlogPost {
 const BlogPost = () => {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
+  const { trackPostEngagement } = useAnalytics();
   const [post, setPost] = useState<BlogPost | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -85,12 +87,13 @@ const BlogPost = () => {
           console.log('Post fetched successfully:', data);
           setPost(data);
           
-          // Update view count
-          try {
-            await supabase.rpc('increment_post_views', { post_id: data.id });
-          } catch (viewError) {
-            console.error('Error updating view count:', viewError);
-          }
+          // Track post view with enhanced analytics
+          await trackPostEngagement(data.id, 'view', {
+            timestamp: new Date().toISOString(),
+            user_agent: navigator.userAgent,
+            referrer: document.referrer,
+            page_url: window.location.href
+          });
         }
       } catch (error) {
         console.error('Unexpected error fetching post:', error);
@@ -106,7 +109,26 @@ const BlogPost = () => {
     };
 
     fetchPost();
-  }, [id, toast]);
+  }, [id, toast, trackPostEngagement]);
+
+  const handleLike = async () => {
+    if (post) {
+      await trackPostEngagement(post.id, 'like', {
+        timestamp: new Date().toISOString(),
+        action: 'like_button_click'
+      });
+    }
+  };
+
+  const handleShare = async () => {
+    if (post) {
+      await trackPostEngagement(post.id, 'share', {
+        timestamp: new Date().toISOString(),
+        action: 'share_button_click',
+        share_url: window.location.href
+      });
+    }
+  };
 
   if (loading) {
     return (
@@ -295,7 +317,11 @@ const BlogPost = () => {
         )}
 
         {/* Comments and Social Interactions */}
-        <CommentsSection postId={post.id} />
+        <CommentsSection 
+          postId={post.id} 
+          onLike={handleLike}
+          onShare={handleShare}
+        />
 
         {/* Article Footer */}
         <footer className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-gray-200">

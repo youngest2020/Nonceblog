@@ -3,13 +3,14 @@ import BlogHeader from "@/components/BlogHeader";
 import UserManagement from "@/components/UserManagement";
 import EnhancedPromotionSettings from "@/components/EnhancedPromotionSettings";
 import ProfileSettings from "@/components/ProfileSettings";
+import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 import { useAdminBlogPosts } from "@/hooks/useBlogPosts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "react-router-dom";
-import { PlusCircle, Edit, Trash2, Eye, Users, Settings, Megaphone } from "lucide-react";
+import { PlusCircle, Edit, Trash2, Eye, Users, Settings, Megaphone, BarChart3 } from "lucide-react";
 
 const AdminDashboard = () => {
   const { posts, loading, deletePost } = useAdminBlogPosts();
@@ -48,11 +49,15 @@ const AdminDashboard = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-          <p className="text-gray-600">Manage your blog posts, users, promotions, and settings</p>
+          <p className="text-gray-600">Manage your blog posts, users, promotions, and analytics</p>
         </div>
 
-        <Tabs defaultValue="posts" className="space-y-6">
-          <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full">
+        <Tabs defaultValue="analytics" className="space-y-6">
+          <TabsList className="grid grid-cols-2 md:grid-cols-5 w-full">
+            <TabsTrigger value="analytics" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Analytics</span>
+            </TabsTrigger>
             <TabsTrigger value="posts" className="flex items-center gap-2">
               <Edit className="h-4 w-4" />
               <span className="hidden sm:inline">Posts</span>
@@ -70,6 +75,10 @@ const AdminDashboard = () => {
               <span className="hidden sm:inline">Profile</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="analytics">
+            <AnalyticsDashboard />
+          </TabsContent>
 
           <TabsContent value="posts">
             <Card>
