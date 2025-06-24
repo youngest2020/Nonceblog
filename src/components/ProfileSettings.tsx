@@ -41,47 +41,6 @@ const ProfileSettings = () => {
     }
   };
 
-  const ensureAvatarsBucket = async () => {
-    try {
-      console.log('Checking if avatars bucket exists...');
-      
-      // First, try to list buckets to see if avatars exists
-      const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-      
-      if (listError) {
-        console.error('Error listing buckets:', listError);
-        throw new Error('Unable to access storage. Please check your connection.');
-      }
-
-      const avatarsBucket = buckets?.find(bucket => bucket.name === 'avatars');
-      
-      if (!avatarsBucket) {
-        console.log('Avatars bucket not found, attempting to create...');
-        
-        // Try to create the bucket
-        const { data: createData, error: createError } = await supabase.storage.createBucket('avatars', {
-          public: true,
-          fileSizeLimit: 5242880, // 5MB
-          allowedMimeTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-        });
-
-        if (createError) {
-          console.error('Error creating avatars bucket:', createError);
-          throw new Error('Unable to create storage bucket. Please contact support or create the "avatars" bucket manually in your Supabase dashboard.');
-        }
-
-        console.log('Avatars bucket created successfully:', createData);
-      } else {
-        console.log('Avatars bucket exists:', avatarsBucket);
-      }
-      
-      return true;
-    } catch (error: any) {
-      console.error('Error ensuring avatars bucket:', error);
-      throw error;
-    }
-  };
-
   const handleProfilePictureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -106,9 +65,6 @@ const ProfileSettings = () => {
 
     setIsUploading(true);
     try {
-      // Ensure the avatars bucket exists
-      await ensureAvatarsBucket();
-
       console.log('Uploading profile picture to Supabase Storage...');
       
       const fileExt = file.name.split('.').pop();
@@ -133,6 +89,9 @@ const ProfileSettings = () => {
         });
 
       if (uploadError) {
+        if (uploadError.message.includes('Bucket not found')) {
+          throw new Error('The avatars storage bucket does not exist. Please create the "avatars" bucket in your Supabase dashboard first.');
+        }
         throw uploadError;
       }
 
