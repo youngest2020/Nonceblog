@@ -6,20 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Trash2, Mail, Eye, EyeOff, Copy } from "lucide-react";
-import { mockAdminProfile } from "@/lib/mockData";
+import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
-interface MockUser {
-  id: string;
-  email: string | null;
-  display_name: string | null;
-  profile_picture: string | null;
-  is_admin: boolean | null;
-  created_at: string | null;
-}
+type Profile = Database['public']['Tables']['profiles']['Row'];
 
 const UserManagement = () => {
   const { toast } = useToast();
-  const [users, setUsers] = useState<MockUser[]>([]);
+  const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserName, setNewUserName] = useState("");
@@ -27,27 +21,21 @@ const UserManagement = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isAddingUser, setIsAddingUser] = useState(false);
 
-  // Mock users data
-  const mockUsers: MockUser[] = [
-    {
-      id: mockAdminProfile.id,
-      email: mockAdminProfile.email,
-      display_name: mockAdminProfile.display_name,
-      profile_picture: mockAdminProfile.profile_picture,
-      is_admin: mockAdminProfile.is_admin,
-      created_at: mockAdminProfile.created_at
-    }
-  ];
-
-  // Fetch users from localStorage
+  // Fetch users from Supabase
   const fetchUsers = async () => {
     try {
-      console.log('Fetching users from localStorage...');
-      const storedUsers = localStorage.getItem('users');
-      const users = storedUsers ? JSON.parse(storedUsers) : mockUsers;
+      console.log('Fetching users from Supabase...');
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
       
-      console.log('Users fetched successfully:', users);
-      setUsers(users);
+      console.log('Users fetched successfully:', data);
+      setUsers(data || []);
     } catch (error: any) {
       console.error('Error fetching users:', error);
       toast({
@@ -92,22 +80,47 @@ const UserManagement = () => {
     }
 
     try {
-      const newUser: MockUser = {
-        id: Date.now().toString(),
+      console.log('Creating user with Supabase Auth...');
+      
+      // Create user with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: newUserEmail.trim(),
-        display_name: newUserName.trim(),
-        profile_picture: null,
-        is_admin: false,
-        created_at: new Date().toISOString()
-      };
+        password: generatedPassword,
+        email_confirm: true,
+        user_metadata: {
+          display_name: newUserName.trim()
+        }
+      });
 
-      const updatedUsers = [...users, newUser];
-      localStorage.setItem('users', JSON.stringify(updatedUsers));
-      setUsers(updatedUsers);
+      if (authError) {
+        throw authError;
+      }
+
+      if (!authData.user) {
+        throw new Error('Failed to create user');
+      }
+
+      // Create profile record
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: authData.user.id,
+          email: newUserEmail.trim(),
+          display_name: newUserName.trim(),
+          is_admin: false
+        })
+        .select()
+        .single();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      setUsers(prev => [profileData, ...prev]);
 
       toast({
         title: "Success", 
-        description: `User ${newUserName} created successfully! (Mock implementation)`,
+        description: `User ${newUserName} created successfully!`,
       });
       
       // Reset form
@@ -116,6 +129,7 @@ const UserManagement = () => {
       setGeneratedPassword("");
       setIsAddingUser(false);
     } catch (error: any) {
+      console.error('Error creating user:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to create user",
@@ -139,15 +153,22 @@ const UserManagement = () => {
 
     if (window.confirm(`Are you sure you want to delete user ${user.display_name}?`)) {
       try {
-        const updatedUsers = users.filter(u => u.id !== userId);
-        localStorage.setItem('users', JSON.stringify(updatedUsers));
-        setUsers(updatedUsers);
+        // Delete from auth
+        const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+        
+        if (authError) {
+          throw authError;
+        }
+
+        // Profile will be deleted automatically due to foreign key constraint
+        setUsers(prev => prev.filter(u => u.id !== userId));
         
         toast({
           title: "Success",
-          description: "User deleted successfully! (Mock implementation)",
+          description: "User deleted successfully!",
         });
       } catch (error: any) {
+        console.error('Error deleting user:', error);
         toast({
           title: "Error",
           description: error.message || "Failed to delete user",
@@ -174,7 +195,7 @@ const UserManagement = () => {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>User Management (Mock)</span>
+          <span>User Management</span>
           <Button
             onClick={() => setIsAddingUser(true)}
             size="sm"
@@ -189,7 +210,7 @@ const UserManagement = () => {
         {/* Add User Form */}
         {isAddingUser && (
           <div className="border rounded-lg p-4 bg-gray-50">
-            <h3 className="font-medium mb-4">Add New User (Mock)</h3>
+            <h3 className="font-medium mb-4">Add New User</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -252,14 +273,11 @@ const UserManagement = () => {
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-gray-500">
-                  This is a mock implementation. In a real app, this would create an actual user account.
-                </p>
               </div>
             </div>
             
             <div className="flex gap-2 mt-4">
-              <Button onClick={handleAddUser}>Add User (Mock)</Button>
+              <Button onClick={handleAddUser}>Add User</Button>
               <Button 
                 variant="outline" 
                 onClick={() => {

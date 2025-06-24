@@ -8,6 +8,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { User, Upload } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const ProfileSettings = () => {
   const { profile, updateProfile, user } = useAuth();
@@ -64,28 +65,39 @@ const ProfileSettings = () => {
 
     setIsUploading(true);
     try {
-      console.log('Mock uploading profile picture...');
+      console.log('Uploading profile picture to Supabase Storage...');
       
-      // Mock upload - convert to data URL
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const dataUrl = e.target?.result as string;
-        
-        // Update form data with new URL
-        setFormData(prev => ({ 
-          ...prev, 
-          profile_picture: dataUrl 
-        }));
-        
-        // Immediately update the profile
-        await updateProfile({ profile_picture: dataUrl });
-        
-        toast({
-          title: "Success",
-          description: "Profile picture uploaded successfully! (Mock implementation)",
-        });
-      };
-      reader.readAsDataURL(file);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+      const filePath = `profile-pictures/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const publicUrl = data.publicUrl;
+      
+      // Update form data with new URL
+      setFormData(prev => ({ 
+        ...prev, 
+        profile_picture: publicUrl 
+      }));
+      
+      // Immediately update the profile
+      await updateProfile({ profile_picture: publicUrl });
+      
+      toast({
+        title: "Success",
+        description: "Profile picture uploaded successfully!",
+      });
     } catch (error: any) {
       console.error('Profile picture upload error:', error);
       toast({
@@ -114,7 +126,7 @@ const ProfileSettings = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Profile Settings (Mock)</CardTitle>
+        <CardTitle>Profile Settings</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Profile Picture */}
@@ -147,7 +159,7 @@ const ProfileSettings = () => {
               className="hidden"
               onChange={handleProfilePictureUpload}
             />
-            <p className="text-sm text-gray-500 mt-1">JPG, PNG or GIF (max 5MB) - Mock upload</p>
+            <p className="text-sm text-gray-500 mt-1">JPG, PNG or GIF (max 5MB)</p>
           </div>
         </div>
 
@@ -187,7 +199,7 @@ const ProfileSettings = () => {
         </div>
 
         <Button onClick={handleSave} className="w-full">
-          Save Changes (Mock)
+          Save Changes
         </Button>
       </CardContent>
     </Card>

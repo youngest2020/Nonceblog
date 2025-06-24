@@ -1,39 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 
-export interface PostAnalytics {
-  id: string;
-  post_id: string;
-  views: number;
-  unique_views: number;
-  likes: number;
-  shares: number;
-  comments_count: number;
-  reading_time_avg: number;
-  bounce_rate: number;
-  engagement_rate: number;
-  last_viewed: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface PromotionAnalytics {
-  id: string;
-  promotion_id: string;
-  total_views: number;
-  unique_views: number;
-  total_clicks: number;
-  unique_clicks: number;
-  conversion_rate: number;
-  click_through_rate: number;
-  bounce_rate: number;
-  avg_time_to_click: number;
-  geographic_data: any;
-  device_data: any;
-  referrer_data: any;
-  created_at: string;
-  updated_at: string;
-}
+type PostAnalytics = Database['public']['Tables']['post_analytics']['Row'];
+type PromotionAnalytics = Database['public']['Tables']['promotion_analytics']['Row'];
 
 export interface AnalyticsSummary {
   total_posts: number;
@@ -62,57 +33,79 @@ export const useAnalytics = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Mock analytics data
-  const mockPostAnalytics: PostAnalytics[] = [
-    {
-      id: '1',
-      post_id: '1',
-      views: 1250,
-      unique_views: 890,
-      likes: 45,
-      shares: 12,
-      comments_count: 8,
-      reading_time_avg: 180,
-      bounce_rate: 35.5,
-      engagement_rate: 5.2,
-      last_viewed: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: '2',
-      post_id: '2',
-      views: 890,
-      unique_views: 650,
-      likes: 32,
-      shares: 8,
-      comments_count: 5,
-      reading_time_avg: 150,
-      bounce_rate: 42.1,
-      engagement_rate: 4.8,
-      last_viewed: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  ];
+  const fetchPostAnalytics = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('post_analytics')
+        .select(`
+          *,
+          blog_posts (
+            title
+          )
+        `)
+        .order('created_at', { ascending: false });
 
-  const mockAnalyticsSummary: AnalyticsSummary = {
-    total_posts: 3,
-    total_views: 2140,
-    total_unique_views: 1540,
-    total_likes: 77,
-    total_shares: 20,
-    total_comments: 13,
-    avg_engagement_rate: 5.0
+      if (error) {
+        throw error;
+      }
+
+      setPostAnalytics(data || []);
+    } catch (error: any) {
+      console.error('Error fetching post analytics:', error);
+    }
   };
 
-  const mockPromotionSummary: PromotionSummary = {
-    total_promotions: 0,
-    total_views: 0,
-    total_unique_views: 0,
-    total_clicks: 0,
-    total_unique_clicks: 0,
-    avg_click_through_rate: 0
+  const fetchPromotionAnalytics = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('promotion_analytics')
+        .select(`
+          *,
+          promotions (
+            title,
+            message
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      setPromotionAnalytics(data || []);
+    } catch (error: any) {
+      console.error('Error fetching promotion analytics:', error);
+    }
+  };
+
+  const calculateSummaries = () => {
+    // Calculate post analytics summary
+    const postSummary: AnalyticsSummary = {
+      total_posts: postAnalytics.length,
+      total_views: postAnalytics.reduce((sum, p) => sum + (p.views || 0), 0),
+      total_unique_views: postAnalytics.reduce((sum, p) => sum + (p.unique_views || 0), 0),
+      total_likes: postAnalytics.reduce((sum, p) => sum + (p.likes || 0), 0),
+      total_shares: postAnalytics.reduce((sum, p) => sum + (p.shares || 0), 0),
+      total_comments: postAnalytics.reduce((sum, p) => sum + (p.comments_count || 0), 0),
+      avg_engagement_rate: postAnalytics.length > 0 
+        ? postAnalytics.reduce((sum, p) => sum + (p.engagement_rate || 0), 0) / postAnalytics.length
+        : 0
+    };
+
+    // Calculate promotion analytics summary
+    const promSummary: PromotionSummary = {
+      total_promotions: promotionAnalytics.length,
+      total_views: promotionAnalytics.reduce((sum, p) => sum + (p.total_views || 0), 0),
+      total_unique_views: promotionAnalytics.reduce((sum, p) => sum + (p.unique_views || 0), 0),
+      total_clicks: promotionAnalytics.reduce((sum, p) => sum + (p.total_clicks || 0), 0),
+      total_unique_clicks: promotionAnalytics.reduce((sum, p) => sum + (p.unique_clicks || 0), 0),
+      avg_click_through_rate: promotionAnalytics.length > 0
+        ? promotionAnalytics.reduce((sum, p) => sum + (p.click_through_rate || 0), 0) / promotionAnalytics.length
+        : 0
+    };
+
+    setAnalyticsSummary(postSummary);
+    setPromotionSummary(promSummary);
   };
 
   const trackPostEngagement = async (
@@ -121,32 +114,95 @@ export const useAnalytics = () => {
     eventData: any = {}
   ) => {
     try {
-      console.log('Mock tracking post engagement:', { postId, eventType, eventData });
+      console.log('Tracking post engagement:', { postId, eventType, eventData });
       
-      // Update local analytics
-      setPostAnalytics(prev => prev.map(analytics => {
-        if (analytics.post_id === postId) {
-          const updated = { ...analytics };
-          switch (eventType) {
-            case 'view':
-              updated.views += 1;
-              updated.unique_views += 1;
-              break;
-            case 'like':
-              updated.likes += 1;
-              break;
-            case 'share':
-              updated.shares += 1;
-              break;
-            case 'comment':
-              updated.comments_count += 1;
-              break;
-          }
-          updated.engagement_rate = ((updated.likes + updated.shares + updated.comments_count) / updated.views) * 100;
-          return updated;
+      // Get or create analytics record for this post
+      let { data: analytics, error } = await supabase
+        .from('post_analytics')
+        .select('*')
+        .eq('post_id', postId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        throw error;
+      }
+
+      if (!analytics) {
+        // Create new analytics record
+        const { data: newAnalytics, error: createError } = await supabase
+          .from('post_analytics')
+          .insert({
+            post_id: postId,
+            views: eventType === 'view' ? 1 : 0,
+            unique_views: eventType === 'view' ? 1 : 0,
+            likes: eventType === 'like' ? 1 : 0,
+            shares: eventType === 'share' ? 1 : 0,
+            comments_count: eventType === 'comment' ? 1 : 0,
+            last_viewed: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          throw createError;
         }
-        return analytics;
-      }));
+
+        analytics = newAnalytics;
+      } else {
+        // Update existing analytics
+        const updates: any = {
+          last_viewed: new Date().toISOString()
+        };
+
+        switch (eventType) {
+          case 'view':
+            updates.views = (analytics.views || 0) + 1;
+            updates.unique_views = (analytics.unique_views || 0) + 1;
+            break;
+          case 'like':
+            updates.likes = (analytics.likes || 0) + 1;
+            break;
+          case 'share':
+            updates.shares = (analytics.shares || 0) + 1;
+            break;
+          case 'comment':
+            updates.comments_count = (analytics.comments_count || 0) + 1;
+            break;
+        }
+
+        // Calculate engagement rate
+        const totalEngagements = (updates.likes || analytics.likes || 0) + 
+                                (updates.shares || analytics.shares || 0) + 
+                                (updates.comments_count || analytics.comments_count || 0);
+        const totalViews = updates.views || analytics.views || 1;
+        updates.engagement_rate = (totalEngagements / totalViews) * 100;
+
+        const { data: updatedAnalytics, error: updateError } = await supabase
+          .from('post_analytics')
+          .update(updates)
+          .eq('id', analytics.id)
+          .select()
+          .single();
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        analytics = updatedAnalytics;
+      }
+
+      // Update local state
+      setPostAnalytics(prev => {
+        const index = prev.findIndex(p => p.post_id === postId);
+        if (index >= 0) {
+          const newAnalytics = [...prev];
+          newAnalytics[index] = analytics!;
+          return newAnalytics;
+        } else {
+          return [...prev, analytics!];
+        }
+      });
+
     } catch (error: any) {
       console.error('Error tracking post engagement:', error);
     }
@@ -158,8 +214,84 @@ export const useAnalytics = () => {
     eventData: any = {}
   ) => {
     try {
-      console.log('Mock tracking promotion engagement:', { promotionId, eventType, eventData });
-      // Mock implementation - no actual tracking
+      console.log('Tracking promotion engagement:', { promotionId, eventType, eventData });
+      
+      // Get or create analytics record for this promotion
+      let { data: analytics, error } = await supabase
+        .from('promotion_analytics')
+        .select('*')
+        .eq('promotion_id', promotionId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (!analytics) {
+        // Create new analytics record
+        const { data: newAnalytics, error: createError } = await supabase
+          .from('promotion_analytics')
+          .insert({
+            promotion_id: promotionId,
+            total_views: eventType === 'view' ? 1 : 0,
+            unique_views: eventType === 'view' ? 1 : 0,
+            total_clicks: eventType === 'click' ? 1 : 0,
+            unique_clicks: eventType === 'click' ? 1 : 0
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          throw createError;
+        }
+
+        analytics = newAnalytics;
+      } else {
+        // Update existing analytics
+        const updates: any = {};
+
+        switch (eventType) {
+          case 'view':
+            updates.total_views = (analytics.total_views || 0) + 1;
+            updates.unique_views = (analytics.unique_views || 0) + 1;
+            break;
+          case 'click':
+            updates.total_clicks = (analytics.total_clicks || 0) + 1;
+            updates.unique_clicks = (analytics.unique_clicks || 0) + 1;
+            break;
+        }
+
+        // Calculate click-through rate
+        const totalClicks = updates.total_clicks || analytics.total_clicks || 0;
+        const totalViews = analytics.total_views || 1;
+        updates.click_through_rate = (totalClicks / totalViews) * 100;
+
+        const { data: updatedAnalytics, error: updateError } = await supabase
+          .from('promotion_analytics')
+          .update(updates)
+          .eq('id', analytics.id)
+          .select()
+          .single();
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        analytics = updatedAnalytics;
+      }
+
+      // Update local state
+      setPromotionAnalytics(prev => {
+        const index = prev.findIndex(p => p.promotion_id === promotionId);
+        if (index >= 0) {
+          const newAnalytics = [...prev];
+          newAnalytics[index] = analytics!;
+          return newAnalytics;
+        } else {
+          return [...prev, analytics!];
+        }
+      });
+
     } catch (error: any) {
       console.error('Error tracking promotion engagement:', error);
     }
@@ -169,13 +301,10 @@ export const useAnalytics = () => {
     const loadAnalytics = async () => {
       setLoading(true);
       try {
-        // Simulate loading delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        setPostAnalytics(mockPostAnalytics);
-        setPromotionAnalytics([]);
-        setAnalyticsSummary(mockAnalyticsSummary);
-        setPromotionSummary(mockPromotionSummary);
+        await Promise.all([
+          fetchPostAnalytics(),
+          fetchPromotionAnalytics()
+        ]);
       } finally {
         setLoading(false);
       }
@@ -183,6 +312,10 @@ export const useAnalytics = () => {
 
     loadAnalytics();
   }, []);
+
+  useEffect(() => {
+    calculateSummaries();
+  }, [postAnalytics, promotionAnalytics]);
 
   return {
     postAnalytics,
@@ -193,8 +326,10 @@ export const useAnalytics = () => {
     trackPostEngagement,
     trackPromotionEngagement,
     refetch: async () => {
-      // Mock refetch
-      console.log('Mock analytics refetch');
+      await Promise.all([
+        fetchPostAnalytics(),
+        fetchPromotionAnalytics()
+      ]);
     }
   };
 };
