@@ -63,6 +63,28 @@ export const useBlogPosts = () => {
 
   useEffect(() => {
     fetchPosts();
+
+    // Set up real-time subscription for blog posts
+    const subscription = supabase
+      .channel('blog_posts_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'blog_posts',
+          filter: 'is_published=eq.true'
+        },
+        (payload) => {
+          console.log('Real-time update received:', payload);
+          fetchPosts(); // Refetch posts when changes occur
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   return { posts, loading, refetch: fetchPosts };
@@ -271,6 +293,27 @@ export const useAdminBlogPosts = () => {
 
   useEffect(() => {
     fetchAllPosts();
+
+    // Set up real-time subscription for admin posts
+    const subscription = supabase
+      .channel('admin_blog_posts_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'blog_posts'
+        },
+        (payload) => {
+          console.log('Admin real-time update received:', payload);
+          fetchAllPosts(); // Refetch posts when changes occur
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   return { 

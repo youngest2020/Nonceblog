@@ -1,22 +1,41 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import BlogHeader from "@/components/BlogHeader";
 import CommentsSection from "@/components/CommentsSection";
 import SocialMediaLinks from "@/components/SocialMediaLinks";
 import YouTubeModal from "@/components/YouTubeModal";
 import PromotionalPopup from "@/components/PromotionalPopup";
-import { blogStore } from "@/lib/blogStore";
-import { userStore } from "@/lib/userStore";
+import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { User, Play } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+interface BlogPost {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  content: string | null;
+  image_url: string | null;
+  author_id: string;
+  author_name: string | null;
+  category: string | null;
+  tags: string[] | null;
+  published_at: string | null;
+  is_published: boolean | null;
+  social_handles?: any;
+  media_items?: any;
+  created_at: string | null;
+  updated_at: string | null;
+}
 
 const BlogPost = () => {
   const { id } = useParams<{ id: string }>();
-  const post = id ? blogStore.getPostById(id) : null;
-  const currentUser = userStore.getCurrentUser();
-  const postAuthor = post ? blogStore.getUserById(post.authorId) : null;
+  const { toast } = useToast();
+  const [post, setPost] = useState<BlogPost | null>(null);
+  const [loading, setLoading] = useState(true);
   
   const [youtubeModal, setYoutubeModal] = useState<{isOpen: boolean, url: string, title?: string}>({
     isOpen: false,
@@ -27,13 +46,90 @@ const BlogPost = () => {
   // Load promotion settings
   const promotionSettings = JSON.parse(localStorage.getItem('promotionSettings') || '{"isEnabled": false}');
 
+  useEffect(() => {
+    const fetchPost = async () => {
+      if (!id) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        console.log('Fetching post with ID:', id);
+        
+        // First try to fetch by ID
+        let { data, error } = await supabase
+          .from('blog_posts')
+          .select('*')
+          .eq('id', id)
+          .eq('is_published', true)
+          .single();
+
+        // If not found by ID, try by slug
+        if (error && error.code === 'PGRST116') {
+          console.log('Post not found by ID, trying by slug...');
+          const { data: slugData, error: slugError } = await supabase
+            .from('blog_posts')
+            .select('*')
+            .eq('slug', id)
+            .eq('is_published', true)
+            .single();
+          
+          data = slugData;
+          error = slugError;
+        }
+
+        if (error) {
+          console.error('Error fetching post:', error);
+          if (error.code === 'PGRST116') {
+            console.log('Post not found in database');
+          }
+          setPost(null);
+        } else {
+          console.log('Post fetched successfully:', data);
+          setPost(data);
+          
+          // Update view count
+          try {
+            await supabase.rpc('increment_post_views', { post_id: data.id });
+          } catch (viewError) {
+            console.error('Error updating view count:', viewError);
+          }
+        }
+      } catch (error) {
+        console.error('Unexpected error fetching post:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load blog post",
+          variant: "destructive",
+        });
+        setPost(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPost();
+  }, [id, toast]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <BlogHeader />
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading post...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!post) {
     return (
       <div className="min-h-screen bg-gray-50">
         <BlogHeader />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 text-center">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Post not found</h1>
-          <p className="text-gray-600 mb-6 sm:mb-8">The blog post you're looking for doesn't exist.</p>
+          <p className="text-gray-600 mb-6 sm:mb-8">The blog post you're looking for doesn't exist or has been removed.</p>
           <Link to="/">
             <Button>← Back to Blog</Button>
           </Link>
@@ -42,7 +138,8 @@ const BlogPost = () => {
     );
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "No date";
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -119,64 +216,73 @@ const BlogPost = () => {
         {/* Article Header */}
         <header className="mb-6 sm:mb-8">
           <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <Badge variant="secondary">{post.category}</Badge>
+            <Badge variant="secondary">{post.category || "General"}</Badge>
             <span className="text-gray-500">•</span>
-            <span className="text-gray-500 text-sm">{formatDate(post.publishedAt)}</span>
+            <span className="text-gray-500 text-sm">{formatDate(post.published_at || post.created_at)}</span>
           </div>
           
           <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 leading-tight mb-4">
             {post.title}
           </h1>
           
-          <p className="text-lg sm:text-xl text-gray-600 mb-4 sm:mb-6">
-            {post.excerpt}
-          </p>
+          {post.excerpt && (
+            <p className="text-lg sm:text-xl text-gray-600 mb-4 sm:mb-6">
+              {post.excerpt}
+            </p>
+          )}
           
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 pb-4 sm:pb-6 gap-4">
             <div className="flex items-center space-x-3">
               <Avatar className="h-10 w-10 sm:h-12 sm:w-12">
-                <AvatarImage src={postAuthor?.profilePicture || currentUser.profilePicture} alt={post.author} />
                 <AvatarFallback>
                   <User className="h-5 w-5 sm:h-6 sm:w-6" />
                 </AvatarFallback>
               </Avatar>
               <div>
-                <p className="font-medium text-gray-900 text-sm sm:text-base">By {post.author}</p>
-                <p className="text-xs sm:text-sm text-gray-500">Published on {formatDate(post.publishedAt)}</p>
+                <p className="font-medium text-gray-900 text-sm sm:text-base">By {post.author_name || "Unknown Author"}</p>
+                <p className="text-xs sm:text-sm text-gray-500">Published on {formatDate(post.published_at || post.created_at)}</p>
               </div>
             </div>
             
-            <div className="flex flex-wrap gap-2">
-              {post.tags.map((tag) => (
-                <Badge key={tag} variant="outline" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
+            {post.tags && post.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {post.tags.map((tag) => (
+                  <Badge key={tag} variant="outline" className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         </header>
 
         {/* Featured Image */}
-        <div className="mb-6 sm:mb-8">
-          <img 
-            src={post.imageUrl} 
-            alt={post.title}
-            className="w-full h-48 sm:h-64 lg:h-96 object-cover rounded-lg shadow-lg"
-          />
-        </div>
+        {post.image_url && (
+          <div className="mb-6 sm:mb-8">
+            <img 
+              src={post.image_url} 
+              alt={post.title}
+              className="w-full h-48 sm:h-64 lg:h-96 object-cover rounded-lg shadow-lg"
+            />
+          </div>
+        )}
 
         {/* Article Content */}
         <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6 lg:p-8 mb-6 sm:mb-8">
-          <div 
-            className="prose prose-sm sm:prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-blue-600 prose-strong:text-gray-900"
-            dangerouslySetInnerHTML={{ __html: post.content }}
-          />
+          {post.content ? (
+            <div 
+              className="prose prose-sm sm:prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-blue-600 prose-strong:text-gray-900"
+              dangerouslySetInnerHTML={{ __html: post.content }}
+            />
+          ) : (
+            <p className="text-gray-600">No content available for this post.</p>
+          )}
           
           {/* Additional Media Items */}
-          {post.mediaItems && post.mediaItems.length > 0 && (
+          {post.media_items && Array.isArray(post.media_items) && post.media_items.length > 0 && (
             <div className="mt-6 sm:mt-8">
-              {post.mediaItems.map((item) => (
-                <div key={item.id}>
+              {post.media_items.map((item: any, index: number) => (
+                <div key={item.id || index}>
                   {renderMediaItem(item)}
                 </div>
               ))}
@@ -185,9 +291,9 @@ const BlogPost = () => {
         </div>
 
         {/* Social Media Links */}
-        {post.socialHandles && (
+        {post.social_handles && (
           <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6 lg:p-8 mb-6 sm:mb-8">
-            <SocialMediaLinks socialHandles={post.socialHandles} />
+            <SocialMediaLinks socialHandles={post.social_handles} />
           </div>
         )}
 
