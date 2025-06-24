@@ -65,190 +65,85 @@ export const useAnalytics = () => {
 
   // Generate or get visitor ID
   const getVisitorId = () => {
-    try {
-      let visitorId = localStorage.getItem('visitor_id');
-      if (!visitorId) {
-        visitorId = 'visitor_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('visitor_id', visitorId);
-      }
-      return visitorId;
-    } catch (error) {
-      console.error('Error getting visitor ID:', error);
-      return 'visitor_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    let visitorId = localStorage.getItem('visitor_id');
+    if (!visitorId) {
+      visitorId = 'visitor_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('visitor_id', visitorId);
     }
+    return visitorId;
   };
 
   // Generate or get session ID
   const getSessionId = () => {
-    try {
-      let sessionId = sessionStorage.getItem('session_id');
-      if (!sessionId) {
-        sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        sessionStorage.setItem('session_id', sessionId);
-      }
-      return sessionId;
-    } catch (error) {
-      console.error('Error getting session ID:', error);
-      return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    let sessionId = sessionStorage.getItem('session_id');
+    if (!sessionId) {
+      sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      sessionStorage.setItem('session_id', sessionId);
     }
+    return sessionId;
   };
 
   const fetchPostAnalytics = async () => {
     try {
-      const { data, error } = await Promise.race([
-        supabase
-          .from('post_analytics')
-          .select(`
-            *,
-            blog_posts!inner(title, slug)
-          `)
-          .order('views', { ascending: false }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Post analytics fetch timeout')), 10000)
-        )
-      ]) as any;
+      const { data, error } = await supabase
+        .from('post_analytics')
+        .select(`
+          *,
+          blog_posts!inner(title, slug)
+        `)
+        .order('views', { ascending: false });
 
       if (error) throw error;
       setPostAnalytics(data || []);
     } catch (error: any) {
       console.error('Error fetching post analytics:', error);
-      // Don't show toast for timeout errors to avoid spam
-      if (!error.message?.includes('timeout')) {
-        toast({
-          title: "Warning",
-          description: "Failed to load post analytics",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Error",
+        description: "Failed to load post analytics",
+        variant: "destructive",
+      });
     }
   };
 
   const fetchPromotionAnalytics = async () => {
     try {
-      const { data, error } = await Promise.race([
-        supabase
-          .from('promotion_analytics')
-          .select(`
-            *,
-            promotions!inner(title, message)
-          `)
-          .order('total_views', { ascending: false }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Promotion analytics fetch timeout')), 10000)
-        )
-      ]) as any;
+      const { data, error } = await supabase
+        .from('promotion_analytics')
+        .select(`
+          *,
+          promotions!inner(title, message)
+        `)
+        .order('total_views', { ascending: false });
 
       if (error) throw error;
       setPromotionAnalytics(data || []);
     } catch (error: any) {
       console.error('Error fetching promotion analytics:', error);
-      // Don't show toast for timeout errors
-      if (!error.message?.includes('timeout')) {
-        toast({
-          title: "Warning",
-          description: "Failed to load promotion analytics",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Error",
+        description: "Failed to load promotion analytics",
+        variant: "destructive",
+      });
     }
   };
 
   const fetchAnalyticsSummary = async () => {
     try {
-      // Create a basic summary from post_analytics table
-      const { data, error } = await Promise.race([
-        supabase
-          .from('post_analytics')
-          .select('views, likes, shares, comments_count'),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Analytics summary fetch timeout')), 10000)
-        )
-      ]) as any;
-
+      const { data, error } = await supabase.rpc('get_post_analytics_summary');
       if (error) throw error;
-      
-      if (data && data.length > 0) {
-        const summary = {
-          total_posts: data.length,
-          total_views: data.reduce((sum: number, item: any) => sum + (item.views || 0), 0),
-          total_unique_views: data.reduce((sum: number, item: any) => sum + (item.unique_views || 0), 0),
-          total_likes: data.reduce((sum: number, item: any) => sum + (item.likes || 0), 0),
-          total_shares: data.reduce((sum: number, item: any) => sum + (item.shares || 0), 0),
-          total_comments: data.reduce((sum: number, item: any) => sum + (item.comments_count || 0), 0),
-          avg_engagement_rate: data.reduce((sum: number, item: any) => sum + (item.engagement_rate || 0), 0) / data.length
-        };
-        setAnalyticsSummary(summary);
-      } else {
-        setAnalyticsSummary({
-          total_posts: 0,
-          total_views: 0,
-          total_unique_views: 0,
-          total_likes: 0,
-          total_shares: 0,
-          total_comments: 0,
-          avg_engagement_rate: 0
-        });
-      }
+      setAnalyticsSummary(data[0] || null);
     } catch (error: any) {
       console.error('Error fetching analytics summary:', error);
-      // Set default values instead of showing error
-      setAnalyticsSummary({
-        total_posts: 0,
-        total_views: 0,
-        total_unique_views: 0,
-        total_likes: 0,
-        total_shares: 0,
-        total_comments: 0,
-        avg_engagement_rate: 0
-      });
     }
   };
 
   const fetchPromotionSummary = async () => {
     try {
-      // Create a basic summary from promotion_analytics table
-      const { data, error } = await Promise.race([
-        supabase
-          .from('promotion_analytics')
-          .select('total_views, unique_views, total_clicks, unique_clicks, click_through_rate'),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Promotion summary fetch timeout')), 10000)
-        )
-      ]) as any;
-
+      const { data, error } = await supabase.rpc('get_promotion_analytics_summary');
       if (error) throw error;
-      
-      if (data && data.length > 0) {
-        const summary = {
-          total_promotions: data.length,
-          total_views: data.reduce((sum: number, item: any) => sum + (item.total_views || 0), 0),
-          total_unique_views: data.reduce((sum: number, item: any) => sum + (item.unique_views || 0), 0),
-          total_clicks: data.reduce((sum: number, item: any) => sum + (item.total_clicks || 0), 0),
-          total_unique_clicks: data.reduce((sum: number, item: any) => sum + (item.unique_clicks || 0), 0),
-          avg_click_through_rate: data.reduce((sum: number, item: any) => sum + (item.click_through_rate || 0), 0) / data.length
-        };
-        setPromotionSummary(summary);
-      } else {
-        setPromotionSummary({
-          total_promotions: 0,
-          total_views: 0,
-          total_unique_views: 0,
-          total_clicks: 0,
-          total_unique_clicks: 0,
-          avg_click_through_rate: 0
-        });
-      }
+      setPromotionSummary(data[0] || null);
     } catch (error: any) {
       console.error('Error fetching promotion summary:', error);
-      // Set default values instead of showing error
-      setPromotionSummary({
-        total_promotions: 0,
-        total_views: 0,
-        total_unique_views: 0,
-        total_clicks: 0,
-        total_unique_clicks: 0,
-        avg_click_through_rate: 0
-      });
     }
   };
 
@@ -261,15 +156,13 @@ export const useAnalytics = () => {
       const visitorId = getVisitorId();
       const sessionId = getSessionId();
 
-      // Use a simpler approach - just increment the analytics directly
-      if (eventType === 'view') {
-        await Promise.race([
-          supabase.rpc('increment_post_views', { post_id: postId }),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Analytics timeout')), 5000)
-          )
-        ]);
-      }
+      await supabase.rpc('track_post_engagement', {
+        p_post_id: postId,
+        p_event_type: eventType,
+        p_session_id: sessionId,
+        p_visitor_id: visitorId,
+        p_event_data: eventData
+      });
 
       // Refresh analytics after tracking
       if (eventType === 'view') {
@@ -278,42 +171,31 @@ export const useAnalytics = () => {
       }
     } catch (error: any) {
       console.error('Error tracking post engagement:', error);
-      // Don't show user-facing errors for analytics failures
     }
   };
 
   const trackPromotionEngagement = async (
     promotionId: string,
-    eventType: 'view' | 'click' | 'close',
+    eventType: 'view' | 'click',
     eventData: any = {}
   ) => {
     try {
       const visitorId = getVisitorId();
       const sessionId = getSessionId();
 
-      // Use a simpler approach - just increment the analytics directly
-      if (eventType === 'view') {
-        await Promise.race([
-          supabase.rpc('increment_promotion_views', { promotion_id: promotionId }),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Analytics timeout')), 5000)
-          )
-        ]);
-      } else if (eventType === 'click') {
-        await Promise.race([
-          supabase.rpc('increment_promotion_clicks', { promotion_id: promotionId }),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Analytics timeout')), 5000)
-          )
-        ]);
-      }
+      await supabase.rpc('track_promotion_engagement', {
+        p_promotion_id: promotionId,
+        p_event_type: eventType,
+        p_session_id: sessionId,
+        p_visitor_id: visitorId,
+        p_event_data: eventData
+      });
 
       // Refresh analytics after tracking
       await fetchPromotionAnalytics();
       await fetchPromotionSummary();
     } catch (error: any) {
       console.error('Error tracking promotion engagement:', error);
-      // Don't show user-facing errors for analytics failures
     }
   };
 
@@ -322,58 +204,37 @@ export const useAnalytics = () => {
       const visitorId = getVisitorId();
       const sessionId = getSessionId();
 
-      // Simplified session creation
-      await Promise.race([
-        supabase
-          .from('user_sessions')
-          .upsert({
-            session_id: sessionId,
-            visitor_id: visitorId,
-            user_agent: navigator.userAgent,
-            referrer: document.referrer,
-            landing_page: window.location.pathname,
-            session_start: new Date().toISOString()
-          }, {
-            onConflict: 'session_id'
-          }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session creation timeout')), 5000)
-        )
-      ]);
+      await supabase.rpc('create_user_session', {
+        p_session_id: sessionId,
+        p_visitor_id: visitorId,
+        p_user_agent: navigator.userAgent,
+        p_referrer: document.referrer,
+        p_landing_page: window.location.pathname
+      });
     } catch (error: any) {
       console.error('Error creating user session:', error);
-      // Don't show user-facing errors for session creation failures
     }
   };
 
   useEffect(() => {
-    let mounted = true;
-
     const loadAnalytics = async () => {
-      if (!mounted) return;
-      
       setLoading(true);
       try {
-        // Load analytics with individual error handling
-        const promises = [
-          createUserSession().catch(err => console.error('Session creation failed:', err)),
-          fetchPostAnalytics().catch(err => console.error('Post analytics failed:', err)),
-          fetchPromotionAnalytics().catch(err => console.error('Promotion analytics failed:', err)),
-          fetchAnalyticsSummary().catch(err => console.error('Analytics summary failed:', err)),
-          fetchPromotionSummary().catch(err => console.error('Promotion summary failed:', err))
-        ];
-
-        await Promise.allSettled(promises);
+        await Promise.all([
+          createUserSession(),
+          fetchPostAnalytics(),
+          fetchPromotionAnalytics(),
+          fetchAnalyticsSummary(),
+          fetchPromotionSummary()
+        ]);
       } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     };
 
     loadAnalytics();
 
-    // Set up real-time subscriptions with error handling
+    // Set up real-time subscriptions
     const postAnalyticsSubscription = supabase
       .channel('post_analytics_changes')
       .on(
@@ -384,10 +245,8 @@ export const useAnalytics = () => {
           table: 'post_analytics'
         },
         () => {
-          if (mounted) {
-            fetchPostAnalytics().catch(err => console.error('Real-time post analytics update failed:', err));
-            fetchAnalyticsSummary().catch(err => console.error('Real-time analytics summary update failed:', err));
-          }
+          fetchPostAnalytics();
+          fetchAnalyticsSummary();
         }
       )
       .subscribe();
@@ -402,16 +261,13 @@ export const useAnalytics = () => {
           table: 'promotion_analytics'
         },
         () => {
-          if (mounted) {
-            fetchPromotionAnalytics().catch(err => console.error('Real-time promotion analytics update failed:', err));
-            fetchPromotionSummary().catch(err => console.error('Real-time promotion summary update failed:', err));
-          }
+          fetchPromotionAnalytics();
+          fetchPromotionSummary();
         }
       )
       .subscribe();
 
     return () => {
-      mounted = false;
       postAnalyticsSubscription.unsubscribe();
       promotionAnalyticsSubscription.unsubscribe();
     };
@@ -426,13 +282,12 @@ export const useAnalytics = () => {
     trackPostEngagement,
     trackPromotionEngagement,
     refetch: async () => {
-      const promises = [
-        fetchPostAnalytics().catch(err => console.error('Refetch post analytics failed:', err)),
-        fetchPromotionAnalytics().catch(err => console.error('Refetch promotion analytics failed:', err)),
-        fetchAnalyticsSummary().catch(err => console.error('Refetch analytics summary failed:', err)),
-        fetchPromotionSummary().catch(err => console.error('Refetch promotion summary failed:', err))
-      ];
-      await Promise.allSettled(promises);
+      await Promise.all([
+        fetchPostAnalytics(),
+        fetchPromotionAnalytics(),
+        fetchAnalyticsSummary(),
+        fetchPromotionSummary()
+      ]);
     }
   };
 };
