@@ -114,7 +114,8 @@ const EnhancedPromotionalPopup = ({ currentPage = '/' }: EnhancedPromotionalPopu
       const visitorId = getVisitorId();
       await trackPromotionClick(currentPromotion.id, visitorId);
       
-      window.open(currentPromotion.button_link, '_blank');
+      // Open external link in new tab
+      window.open(currentPromotion.button_link, '_blank', 'noopener,noreferrer');
       setIsVisible(false);
     }
   };
