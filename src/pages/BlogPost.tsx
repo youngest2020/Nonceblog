@@ -89,7 +89,7 @@ const BlogPost = () => {
         .from('profiles')
         .select('id, display_name, profile_picture, bio')
         .eq('id', authorId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error fetching author profile:', error);
@@ -151,13 +151,23 @@ const BlogPost = () => {
             }
           }
           
-          // Track post view with enhanced analytics
-          await trackPostEngagement(foundPost.id, 'view', {
-            timestamp: new Date().toISOString(),
-            user_agent: navigator.userAgent,
-            referrer: document.referrer,
-            page_url: window.location.href
-          });
+          // Track post view with enhanced analytics - only if user is authenticated
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await trackPostEngagement(foundPost.id, 'view', {
+                timestamp: new Date().toISOString(),
+                user_agent: navigator.userAgent,
+                referrer: document.referrer,
+                page_url: window.location.href
+              });
+            } else {
+              console.log('User not authenticated, skipping analytics tracking');
+            }
+          } catch (analyticsError) {
+            console.warn('Analytics tracking failed:', analyticsError);
+            // Don't show error to user for analytics failures
+          }
         }
       } catch (error: any) {
         console.error('Error fetching post:', error);
@@ -177,20 +187,34 @@ const BlogPost = () => {
 
   const handleLike = async () => {
     if (post) {
-      await trackPostEngagement(post.id, 'like', {
-        timestamp: new Date().toISOString(),
-        action: 'like_button_click'
-      });
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await trackPostEngagement(post.id, 'like', {
+            timestamp: new Date().toISOString(),
+            action: 'like_button_click'
+          });
+        }
+      } catch (error) {
+        console.warn('Like tracking failed:', error);
+      }
     }
   };
 
   const handleShare = async () => {
     if (post) {
-      await trackPostEngagement(post.id, 'share', {
-        timestamp: new Date().toISOString(),
-        action: 'share_button_click',
-        share_url: window.location.href
-      });
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await trackPostEngagement(post.id, 'share', {
+            timestamp: new Date().toISOString(),
+            action: 'share_button_click',
+            share_url: window.location.href
+          });
+        }
+      } catch (error) {
+        console.warn('Share tracking failed:', error);
+      }
     }
   };
 
