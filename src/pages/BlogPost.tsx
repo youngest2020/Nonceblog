@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { User, Play } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface BlogPost {
   id: string;
@@ -32,12 +33,20 @@ interface BlogPost {
   updated_at: string | null;
 }
 
+interface AuthorProfile {
+  id: string;
+  display_name: string | null;
+  profile_picture: string | null;
+  bio: string | null;
+}
+
 const BlogPost = () => {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const { trackPostEngagement } = useAnalytics();
   const { posts } = useBlogPosts();
   const [post, setPost] = useState<BlogPost | null>(null);
+  const [authorProfile, setAuthorProfile] = useState<AuthorProfile | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [youtubeModal, setYoutubeModal] = useState<{isOpen: boolean, url: string, title?: string}>({
@@ -65,6 +74,27 @@ const BlogPost = () => {
         } else {
           console.log('Post fetched successfully:', foundPost);
           setPost(foundPost);
+          
+          // Fetch author profile if author_id exists
+          if (foundPost.author_id) {
+            try {
+              console.log('Fetching author profile for:', foundPost.author_id);
+              const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('id, display_name, profile_picture, bio')
+                .eq('id', foundPost.author_id)
+                .single();
+
+              if (error) {
+                console.error('Error fetching author profile:', error);
+              } else {
+                console.log('Author profile fetched:', profile);
+                setAuthorProfile(profile);
+              }
+            } catch (profileError) {
+              console.error('Error fetching author profile:', profileError);
+            }
+          }
           
           // Track post view with enhanced analytics
           await trackPostEngagement(foundPost.id, 'view', {
@@ -201,6 +231,10 @@ const BlogPost = () => {
     return null;
   };
 
+  // Get display name and profile picture
+  const displayName = authorProfile?.display_name || post.author_name || "Unknown Author";
+  const profilePicture = authorProfile?.profile_picture;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <BlogHeader />
@@ -232,13 +266,28 @@ const BlogPost = () => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 pb-4 sm:pb-6 gap-4">
             <div className="flex items-center space-x-3">
               <Avatar className="h-10 w-10 sm:h-12 sm:w-12">
+                {profilePicture && (
+                  <AvatarImage 
+                    src={profilePicture} 
+                    alt={displayName}
+                    onError={(e) => {
+                      console.log('Avatar image failed to load:', profilePicture);
+                      // Hide the image element on error so fallback shows
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                    }}
+                  />
+                )}
                 <AvatarFallback>
                   <User className="h-5 w-5 sm:h-6 sm:w-6" />
                 </AvatarFallback>
               </Avatar>
               <div>
-                <p className="font-medium text-gray-900 text-sm sm:text-base">By {post.author_name || "Unknown Author"}</p>
+                <p className="font-medium text-gray-900 text-sm sm:text-base">By {displayName}</p>
                 <p className="text-xs sm:text-sm text-gray-500">Published on {formatDate(post.published_at || post.created_at)}</p>
+                {authorProfile?.bio && (
+                  <p className="text-xs text-gray-600 mt-1 max-w-xs truncate">{authorProfile.bio}</p>
+                )}
               </div>
             </div>
             
