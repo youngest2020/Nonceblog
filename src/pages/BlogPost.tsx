@@ -44,10 +44,11 @@ const BlogPost = () => {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const { trackPostEngagement } = useAnalytics();
-  const { posts } = useBlogPosts();
+  const { posts, loading: postsLoading } = useBlogPosts();
   const [post, setPost] = useState<BlogPost | null>(null);
   const [authorProfile, setAuthorProfile] = useState<AuthorProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   const [youtubeModal, setYoutubeModal] = useState<{isOpen: boolean, url: string, title?: string}>({
     isOpen: false,
@@ -56,7 +57,7 @@ const BlogPost = () => {
   });
 
   // Function to fetch post directly from database
-  const fetchPostFromDatabase = async (postId: string) => {
+  const fetchPostFromDatabase = async (postId: string): Promise<BlogPost | null> => {
     try {
       console.log('Fetching post directly from database:', postId);
       
@@ -73,7 +74,7 @@ const BlogPost = () => {
       }
 
       console.log('Post fetched from database:', data);
-      return data;
+      return data as BlogPost;
     } catch (error) {
       console.error('Error in fetchPostFromDatabase:', error);
       return null;
@@ -81,7 +82,7 @@ const BlogPost = () => {
   };
 
   // Function to fetch author profile
-  const fetchAuthorProfile = async (authorId: string) => {
+  const fetchAuthorProfile = async (authorId: string): Promise<AuthorProfile | null> => {
     try {
       console.log('Fetching author profile for:', authorId);
       const { data: profile, error } = await supabase
@@ -96,7 +97,7 @@ const BlogPost = () => {
       }
 
       console.log('Author profile fetched:', profile);
-      return profile;
+      return profile as AuthorProfile;
     } catch (profileError) {
       console.error('Error fetching author profile:', profileError);
       return null;
@@ -106,27 +107,40 @@ const BlogPost = () => {
   useEffect(() => {
     const fetchPost = async () => {
       if (!id) {
+        setError("No post ID provided");
         setLoading(false);
         return;
       }
 
       try {
         console.log('Fetching post with ID:', id);
+        setLoading(true);
+        setError(null);
         
-        // First, try to find post in the posts array (if already loaded)
-        let foundPost = posts.find(p => p.id === id || p.slug === id);
+        let foundPost: BlogPost | null = null;
+
+        // First, try to find post in the posts array (if already loaded and not loading)
+        if (!postsLoading && posts.length > 0) {
+          foundPost = posts.find(p => p.id === id || p.slug === id) || null;
+          console.log('Searched in posts array:', foundPost ? 'Found' : 'Not found');
+        }
         
-        // If not found in posts array, fetch directly from database
+        // If not found in posts array or posts are still loading, fetch directly from database
         if (!foundPost) {
-          console.log('Post not found in posts array, fetching from database...');
+          console.log('Fetching from database...');
           foundPost = await fetchPostFromDatabase(id);
         }
         
-        if (!foundPost || !foundPost.is_published) {
-          console.log('Post not found or not published');
+        if (!foundPost) {
+          console.log('Post not found');
+          setError("Post not found");
+          setPost(null);
+        } else if (!foundPost.is_published) {
+          console.log('Post not published');
+          setError("Post not published");
           setPost(null);
         } else {
-          console.log('Post found:', foundPost);
+          console.log('Post found:', foundPost.title);
           setPost(foundPost);
           
           // Fetch author profile if author_id exists
@@ -145,21 +159,21 @@ const BlogPost = () => {
             page_url: window.location.href
           });
         }
-      } catch (error) {
-        console.error('Unexpected error fetching post:', error);
+      } catch (error: any) {
+        console.error('Error fetching post:', error);
+        setError("Failed to load blog post");
         toast({
           title: "Error",
           description: "Failed to load blog post",
           variant: "destructive",
         });
-        setPost(null);
       } finally {
         setLoading(false);
       }
     };
 
     fetchPost();
-  }, [id, posts, toast, trackPostEngagement]);
+  }, [id, posts, postsLoading, toast, trackPostEngagement]);
 
   const handleLike = async () => {
     if (post) {
@@ -192,13 +206,22 @@ const BlogPost = () => {
     );
   }
 
-  if (!post) {
+  if (error || !post) {
     return (
       <div className="min-h-screen bg-gray-50">
         <BlogHeader />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 text-center">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Post not found</h1>
-          <p className="text-gray-600 mb-6 sm:mb-8">The blog post you're looking for doesn't exist or has been removed.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+            {error || "Post not found"}
+          </h1>
+          <p className="text-gray-600 mb-6 sm:mb-8">
+            {error === "Post not found" 
+              ? "The blog post you're looking for doesn't exist or has been removed."
+              : error === "Post not published"
+              ? "This blog post is not yet published."
+              : "There was an error loading the blog post."
+            }
+          </p>
           <Link to="/">
             <Button>← Back to Blog</Button>
           </Link>
