@@ -12,160 +12,134 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
       throw new Error('File size must be less than 10MB');
     }
 
-    console.log('=== SUPABASE STORAGE DEBUG ===');
+    console.log('=== BLOG IMAGE UPLOAD ===');
     console.log('File details:', { name: file.name, size: file.size, type: file.type });
 
-    // 1. Check authentication first
-    console.log('1. Checking authentication...');
+    // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError) {
-      console.error('Auth error:', authError);
-      throw new Error(`Authentication failed: ${authError.message}`);
-    }
-    if (!user) {
-      throw new Error('You must be signed in to upload images.');
-    }
-    console.log('✓ User authenticated:', { id: user.id, email: user.email });
-
-    // 2. Check user profile and admin status
-    console.log('2. Checking user profile...');
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-    
-    if (profileError) {
-      console.error('Profile error:', profileError);
-    } else {
-      console.log('✓ User profile:', { 
-        id: profile.id, 
-        email: profile.email, 
-        is_admin: profile.is_admin 
-      });
+    if (authError || !user) {
+      throw new Error('You must be signed in to upload images');
     }
 
-    // 3. List all available buckets
-    console.log('3. Listing all storage buckets...');
-    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-    
-    if (bucketsError) {
-      console.error('Error listing buckets:', bucketsError);
-      throw new Error(`Storage access failed: ${bucketsError.message}`);
-    }
+    console.log('✓ User authenticated:', user.email);
 
-    console.log('Available buckets:', buckets?.map(b => ({
-      id: b.id,
-      name: b.name,
-      public: b.public,
-      file_size_limit: b.file_size_limit,
-      allowed_mime_types: b.allowed_mime_types
-    })));
-
-    // 4. Check if blog-images bucket exists
-    const blogImagesBucket = buckets?.find(bucket => bucket.id === 'blog-images');
-    if (!blogImagesBucket) {
-      console.error('❌ blog-images bucket not found!');
-      console.log('Available bucket IDs:', buckets?.map(b => b.id));
-      throw new Error('Blog images storage bucket not found. Please create the "blog-images" bucket in your Supabase dashboard.');
-    }
-    
-    console.log('✓ blog-images bucket found:', blogImagesBucket);
-
-    // 5. Test bucket access by trying to list files
-    console.log('4. Testing bucket access...');
-    const { data: files, error: listError } = await supabase.storage
-      .from('blog-images')
-      .list('', { limit: 1 });
-
-    if (listError) {
-      console.error('Bucket access error:', listError);
-      throw new Error(`Cannot access blog-images bucket: ${listError.message}. Check your RLS policies.`);
-    }
-    
-    console.log('✓ Bucket access successful. Files count:', files?.length || 0);
-
-    // 6. Generate unique filename
+    // Generate unique filename
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-    const filePath = fileName; // Store directly in bucket root
 
-    console.log('5. Uploading file:', { fileName, filePath });
+    console.log('Uploading file:', fileName);
 
-    // 7. Upload the file
+    // Upload the file
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('blog-images')
-      .upload(filePath, file, {
+      .upload(fileName, file, {
         cacheControl: '3600',
         upsert: false
       });
 
     if (uploadError) {
       console.error('Upload error:', uploadError);
-      
-      if (uploadError.message.includes('Duplicate')) {
-        // Retry with a different filename
-        const retryFileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        console.log('Retrying with filename:', retryFileName);
-        
-        const { data: retryData, error: retryError } = await supabase.storage
-          .from('blog-images')
-          .upload(retryFileName, file, {
-            cacheControl: '3600',
-            upsert: false
-          });
-          
-        if (retryError) {
-          console.error('Retry upload failed:', retryError);
-          throw new Error(`Upload failed: ${retryError.message}`);
-        }
-        
-        const { data: retryUrlData } = supabase.storage
-          .from('blog-images')
-          .getPublicUrl(retryFileName);
-
-        console.log('✓ Image uploaded successfully (retry):', retryUrlData.publicUrl);
-        return retryUrlData.publicUrl;
-      }
-      
       throw new Error(`Upload failed: ${uploadError.message}`);
     }
 
-    // 8. Get the public URL
+    // Get the public URL
     const { data: urlData } = supabase.storage
       .from('blog-images')
-      .getPublicUrl(filePath);
+      .getPublicUrl(fileName);
 
     if (!urlData.publicUrl) {
       throw new Error('Failed to get public URL for uploaded image');
     }
 
     console.log('✓ Image uploaded successfully:', urlData.publicUrl);
-    console.log('=== UPLOAD COMPLETE ===');
     return urlData.publicUrl;
     
   } catch (error: any) {
     console.error('=== UPLOAD FAILED ===');
     console.error('Error details:', error);
+    throw error;
+  }
+};
+
+export const uploadAvatar = async (file: File, userId: string): Promise<string> => {
+  try {
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      throw new Error('Please select an image file');
+    }
+
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('File size must be less than 5MB');
+    }
+
+    console.log('=== AVATAR UPLOAD ===');
+    console.log('File details:', { name: file.name, size: file.size, type: file.type });
+
+    // Check authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      throw new Error('You must be signed in to upload images');
+    }
+
+    console.log('✓ User authenticated:', user.email);
+
+    // Generate unique filename with user folder
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${userId}/${Date.now()}-avatar.${fileExt}`;
+
+    console.log('Uploading avatar:', fileName);
+
+    // Delete old avatar if it exists
+    try {
+      const { data: existingFiles } = await supabase.storage
+        .from('avatars')
+        .list(userId);
+      
+      if (existingFiles && existingFiles.length > 0) {
+        const filesToDelete = existingFiles.map(file => `${userId}/${file.name}`);
+        await supabase.storage.from('avatars').remove(filesToDelete);
+        console.log('✓ Old avatars cleaned up');
+      }
+    } catch (error) {
+      console.log('No old avatars to clean up');
+    }
+
+    // Upload the file
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error('Upload error:', uploadError);
+      throw new Error(`Upload failed: ${uploadError.message}`);
+    }
+
+    // Get the public URL
+    const { data: urlData } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(fileName);
+
+    if (!urlData.publicUrl) {
+      throw new Error('Failed to get public URL for uploaded avatar');
+    }
+
+    console.log('✓ Avatar uploaded successfully:', urlData.publicUrl);
+    return urlData.publicUrl;
     
-    // Provide more specific error messages
-    if (error.message.includes('JWT')) {
-      throw new Error('Session expired. Please sign out and sign in again.');
-    }
-    if (error.message.includes('network')) {
-      throw new Error('Network error. Please check your connection and try again.');
-    }
-    if (error.message.includes('bucket')) {
-      throw new Error('Storage configuration error. Please contact support.');
-    }
-    
+  } catch (error: any) {
+    console.error('=== AVATAR UPLOAD FAILED ===');
+    console.error('Error details:', error);
     throw error;
   }
 };
 
 export const deleteBlogImage = async (url: string): Promise<void> => {
   try {
-    console.log('Deleting blog image from Supabase Storage:', url);
+    console.log('Deleting blog image:', url);
     
     // Extract file path from URL
     const urlParts = url.split('/');
@@ -180,9 +154,33 @@ export const deleteBlogImage = async (url: string): Promise<void> => {
       throw error;
     }
 
-    console.log('Blog image deleted successfully');
+    console.log('✓ Blog image deleted successfully');
   } catch (error: any) {
     console.error('Blog image delete error:', error);
+    throw error;
+  }
+};
+
+export const deleteAvatar = async (url: string): Promise<void> => {
+  try {
+    console.log('Deleting avatar:', url);
+    
+    // Extract file path from URL
+    const urlParts = url.split('/');
+    const fileName = urlParts.slice(-2).join('/'); // Get userId/filename
+
+    const { error } = await supabase.storage
+      .from('avatars')
+      .remove([fileName]);
+
+    if (error) {
+      console.error('Delete error:', error);
+      throw error;
+    }
+
+    console.log('✓ Avatar deleted successfully');
+  } catch (error: any) {
+    console.error('Avatar delete error:', error);
     throw error;
   }
 };
@@ -191,24 +189,10 @@ export const deleteBlogImage = async (url: string): Promise<void> => {
 export const isValidImageUrl = (url: string): boolean => {
   try {
     const urlObj = new URL(url);
-    return urlObj.hostname.includes('supabase.co') && url.includes('blog-images');
+    return urlObj.hostname.includes('supabase.co') && 
+           (url.includes('blog-images') || url.includes('avatars'));
   } catch {
     return false;
-  }
-};
-
-// Helper function to get image metadata
-export const getImageMetadata = async (url: string) => {
-  try {
-    const response = await fetch(url, { method: 'HEAD' });
-    return {
-      size: response.headers.get('content-length'),
-      type: response.headers.get('content-type'),
-      lastModified: response.headers.get('last-modified')
-    };
-  } catch (error) {
-    console.error('Error getting image metadata:', error);
-    return null;
   }
 };
 
@@ -231,6 +215,15 @@ export const debugStorageSetup = async () => {
         .from('blog-images')
         .list('', { limit: 1 });
       console.log('blog-images access:', listError ? 'FAILED' : 'SUCCESS');
+      if (listError) console.log('List error:', listError);
+    }
+    
+    // Test avatars access
+    if (buckets?.find(b => b.id === 'avatars')) {
+      const { data: files, error: listError } = await supabase.storage
+        .from('avatars')
+        .list('', { limit: 1 });
+      console.log('avatars access:', listError ? 'FAILED' : 'SUCCESS');
       if (listError) console.log('List error:', listError);
     }
     

@@ -8,7 +8,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { User, Upload } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { uploadAvatar } from "@/lib/imageUpload";
 
 const ProfileSettings = () => {
   const { profile, updateProfile, user } = useAuth();
@@ -45,6 +45,9 @@ const ProfileSettings = () => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
 
+    // Reset the input value so the same file can be selected again
+    event.target.value = '';
+
     if (!file.type.startsWith('image/')) {
       toast({
         title: "Error",
@@ -65,50 +68,18 @@ const ProfileSettings = () => {
 
     setIsUploading(true);
     try {
-      console.log('Uploading profile picture to Supabase Storage...');
+      console.log('Uploading profile picture...');
       
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `${user.id}/${fileName}`;
-
-      // Delete old profile picture if it exists
-      if (formData.profile_picture) {
-        try {
-          const oldPath = formData.profile_picture.split('/').slice(-2).join('/');
-          await supabase.storage.from('avatars').remove([oldPath]);
-        } catch (error) {
-          console.log('Could not delete old profile picture:', error);
-        }
-      }
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true
-        });
-
-      if (uploadError) {
-        if (uploadError.message.includes('Bucket not found')) {
-          throw new Error('The avatars storage bucket does not exist. Please create the "avatars" bucket in your Supabase dashboard first.');
-        }
-        throw uploadError;
-      }
-
-      const { data } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-
-      const publicUrl = data.publicUrl;
+      const imageUrl = await uploadAvatar(file, user.id);
       
       // Update form data with new URL
       setFormData(prev => ({ 
         ...prev, 
-        profile_picture: publicUrl 
+        profile_picture: imageUrl 
       }));
       
       // Immediately update the profile
-      await updateProfile({ profile_picture: publicUrl });
+      await updateProfile({ profile_picture: imageUrl });
       
       toast({
         title: "Success",
