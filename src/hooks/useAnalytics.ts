@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { visitorTracker } from '@/lib/visitorTracking';
 import type { Database } from '@/integrations/supabase/types';
 
 type PostAnalytics = Database['public']['Tables']['post_analytics']['Row'];
@@ -49,7 +50,16 @@ export const useAnalytics = () => {
         throw error;
       }
 
-      setPostAnalytics(data || []);
+      // Remove duplicates by post_id, keeping the most recent
+      const uniqueAnalytics = data?.reduce((acc: PostAnalytics[], current) => {
+        const existing = acc.find(item => item.post_id === current.post_id);
+        if (!existing) {
+          acc.push(current);
+        }
+        return acc;
+      }, []) || [];
+
+      setPostAnalytics(uniqueAnalytics);
     } catch (error: any) {
       console.error('Error fetching post analytics:', error);
     }
@@ -72,7 +82,16 @@ export const useAnalytics = () => {
         throw error;
       }
 
-      setPromotionAnalytics(data || []);
+      // Remove duplicates by promotion_id, keeping the most recent
+      const uniqueAnalytics = data?.reduce((acc: PromotionAnalytics[], current) => {
+        const existing = acc.find(item => item.promotion_id === current.promotion_id);
+        if (!existing) {
+          acc.push(current);
+        }
+        return acc;
+      }, []) || [];
+
+      setPromotionAnalytics(uniqueAnalytics);
     } catch (error: any) {
       console.error('Error fetching promotion analytics:', error);
     }
@@ -114,7 +133,16 @@ export const useAnalytics = () => {
     eventData: any = {}
   ) => {
     try {
-      console.log('Tracking post engagement:', { postId, eventType, eventData });
+      console.log('🔍 Tracking post engagement:', { postId, eventType, eventData });
+      
+      // For view events, check if visitor has already viewed this post
+      if (eventType === 'view') {
+        const isNewView = visitorTracker.markPostAsViewed(postId);
+        if (!isNewView) {
+          console.log('📊 Visitor has already viewed this post, skipping duplicate view tracking');
+          return;
+        }
+      }
       
       // Get or create analytics record for this post
       let { data: analytics, error } = await supabase
@@ -126,6 +154,9 @@ export const useAnalytics = () => {
       if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
         throw error;
       }
+
+      const visitorId = visitorTracker.getVisitorId();
+      const fingerprint = visitorTracker.getVisitorFingerprint();
 
       if (!analytics) {
         // Create new analytics record
@@ -148,6 +179,7 @@ export const useAnalytics = () => {
         }
 
         analytics = newAnalytics;
+        console.log('✅ Created new analytics record for post:', postId);
       } else {
         // Update existing analytics
         const updates: any = {
@@ -157,6 +189,7 @@ export const useAnalytics = () => {
         switch (eventType) {
           case 'view':
             updates.views = (analytics.views || 0) + 1;
+            // Only increment unique views for new visitors
             updates.unique_views = (analytics.unique_views || 0) + 1;
             break;
           case 'like':
@@ -189,22 +222,17 @@ export const useAnalytics = () => {
         }
 
         analytics = updatedAnalytics;
+        console.log('✅ Updated analytics for post:', postId, updates);
       }
 
       // Update local state
       setPostAnalytics(prev => {
-        const index = prev.findIndex(p => p.post_id === postId);
-        if (index >= 0) {
-          const newAnalytics = [...prev];
-          newAnalytics[index] = analytics!;
-          return newAnalytics;
-        } else {
-          return [...prev, analytics!];
-        }
+        const filtered = prev.filter(p => p.post_id !== postId);
+        return [analytics!, ...filtered];
       });
 
     } catch (error: any) {
-      console.error('Error tracking post engagement:', error);
+      console.error('❌ Error tracking post engagement:', error);
     }
   };
 
@@ -214,7 +242,16 @@ export const useAnalytics = () => {
     eventData: any = {}
   ) => {
     try {
-      console.log('Tracking promotion engagement:', { promotionId, eventType, eventData });
+      console.log('🔍 Tracking promotion engagement:', { promotionId, eventType, eventData });
+      
+      // For view events, check if visitor has already viewed this promotion
+      if (eventType === 'view') {
+        const isNewView = visitorTracker.markPromotionAsViewed(promotionId);
+        if (!isNewView) {
+          console.log('📊 Visitor has already viewed this promotion, skipping duplicate view tracking');
+          return;
+        }
+      }
       
       // Get or create analytics record for this promotion
       let { data: analytics, error } = await supabase
@@ -246,6 +283,7 @@ export const useAnalytics = () => {
         }
 
         analytics = newAnalytics;
+        console.log('✅ Created new promotion analytics record:', promotionId);
       } else {
         // Update existing analytics
         const updates: any = {};
@@ -281,22 +319,17 @@ export const useAnalytics = () => {
         }
 
         analytics = updatedAnalytics;
+        console.log('✅ Updated promotion analytics:', promotionId, updates);
       }
 
       // Update local state
       setPromotionAnalytics(prev => {
-        const index = prev.findIndex(p => p.promotion_id === promotionId);
-        if (index >= 0) {
-          const newAnalytics = [...prev];
-          newAnalytics[index] = analytics!;
-          return newAnalytics;
-        } else {
-          return [...prev, analytics!];
-        }
+        const filtered = prev.filter(p => p.promotion_id !== promotionId);
+        return [analytics!, ...filtered];
       });
 
     } catch (error: any) {
-      console.error('Error tracking promotion engagement:', error);
+      console.error('❌ Error tracking promotion engagement:', error);
     }
   };
 
@@ -326,10 +359,13 @@ export const useAnalytics = () => {
           table: 'post_analytics'
         },
         (payload) => {
-          console.log('Realtime update for post analytics:', payload);
+          console.log('📡 Realtime update for post analytics:', payload);
           
           if (payload.eventType === 'INSERT') {
-            setPostAnalytics(prev => [payload.new as PostAnalytics, ...prev]);
+            setPostAnalytics(prev => {
+              const filtered = prev.filter(p => p.post_id !== (payload.new as PostAnalytics).post_id);
+              return [payload.new as PostAnalytics, ...filtered];
+            });
           } else if (payload.eventType === 'UPDATE') {
             setPostAnalytics(prev => prev.map(analytics => 
               analytics.id === payload.new.id ? payload.new as PostAnalytics : analytics
@@ -351,10 +387,13 @@ export const useAnalytics = () => {
           table: 'promotion_analytics'
         },
         (payload) => {
-          console.log('Realtime update for promotion analytics:', payload);
+          console.log('📡 Realtime update for promotion analytics:', payload);
           
           if (payload.eventType === 'INSERT') {
-            setPromotionAnalytics(prev => [payload.new as PromotionAnalytics, ...prev]);
+            setPromotionAnalytics(prev => {
+              const filtered = prev.filter(p => p.promotion_id !== (payload.new as PromotionAnalytics).promotion_id);
+              return [payload.new as PromotionAnalytics, ...filtered];
+            });
           } else if (payload.eventType === 'UPDATE') {
             setPromotionAnalytics(prev => prev.map(analytics => 
               analytics.id === payload.new.id ? payload.new as PromotionAnalytics : analytics

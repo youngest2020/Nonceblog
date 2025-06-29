@@ -1,7 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useAnalytics } from "@/hooks/useAnalytics";
+import { visitorTracker } from "@/lib/visitorTracking";
 import { 
   Eye, 
   Users, 
@@ -12,7 +14,9 @@ import {
   BarChart3,
   Target,
   MousePointer,
-  Activity
+  Activity,
+  RefreshCw,
+  Trash2
 } from "lucide-react";
 
 const AnalyticsDashboard = () => {
@@ -21,7 +25,8 @@ const AnalyticsDashboard = () => {
     promotionAnalytics, 
     analyticsSummary, 
     promotionSummary, 
-    loading 
+    loading,
+    refetch
   } = useAnalytics();
 
   if (loading) {
@@ -47,8 +52,53 @@ const AnalyticsDashboard = () => {
     return num.toFixed(1) + '%';
   };
 
+  const handleRefreshAnalytics = async () => {
+    await refetch();
+  };
+
+  const handleClearVisitorSession = () => {
+    visitorTracker.clearSession();
+    window.location.reload();
+  };
+
   return (
     <div className="space-y-6">
+      {/* Debug Panel for Development */}
+      {process.env.NODE_ENV === 'development' && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="text-orange-800 flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Analytics Debug Panel
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p><strong>Visitor ID:</strong> {visitorTracker.getVisitorId()}</p>
+                <p><strong>Session:</strong> {visitorTracker.getSessionInfo()?.createdAt}</p>
+                <p><strong>Viewed Posts:</strong> {visitorTracker.getSessionInfo()?.viewedPosts.size || 0}</p>
+              </div>
+              <div>
+                <p><strong>Fingerprint:</strong> {visitorTracker.getVisitorFingerprint()}</p>
+                <p><strong>Total Analytics Records:</strong> {postAnalytics.length}</p>
+                <p><strong>Promotion Records:</strong> {promotionAnalytics.length}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleRefreshAnalytics} variant="outline">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh Analytics
+              </Button>
+              <Button size="sm" onClick={handleClearVisitorSession} variant="outline">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear Visitor Session
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -153,7 +203,10 @@ const AnalyticsDashboard = () => {
         <TabsContent value="posts" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Post Performance</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Post Performance</span>
+                <Badge variant="outline">{postAnalytics.length} unique posts</Badge>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -214,7 +267,10 @@ const AnalyticsDashboard = () => {
         <TabsContent value="promotions" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Promotion Performance</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Promotion Performance</span>
+                <Badge variant="outline">{promotionAnalytics.length} unique promotions</Badge>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
