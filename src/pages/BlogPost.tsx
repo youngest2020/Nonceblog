@@ -55,6 +55,54 @@ const BlogPost = () => {
     title: ''
   });
 
+  // Function to fetch post directly from database
+  const fetchPostFromDatabase = async (postId: string) => {
+    try {
+      console.log('Fetching post directly from database:', postId);
+      
+      const { data, error } = await supabase
+        .from('blog_posts')
+        .select('*')
+        .or(`id.eq.${postId},slug.eq.${postId}`)
+        .eq('is_published', true)
+        .single();
+
+      if (error) {
+        console.error('Error fetching post from database:', error);
+        return null;
+      }
+
+      console.log('Post fetched from database:', data);
+      return data;
+    } catch (error) {
+      console.error('Error in fetchPostFromDatabase:', error);
+      return null;
+    }
+  };
+
+  // Function to fetch author profile
+  const fetchAuthorProfile = async (authorId: string) => {
+    try {
+      console.log('Fetching author profile for:', authorId);
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, display_name, profile_picture, bio')
+        .eq('id', authorId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching author profile:', error);
+        return null;
+      }
+
+      console.log('Author profile fetched:', profile);
+      return profile;
+    } catch (profileError) {
+      console.error('Error fetching author profile:', profileError);
+      return null;
+    }
+  };
+
   useEffect(() => {
     const fetchPost = async () => {
       if (!id) {
@@ -65,34 +113,27 @@ const BlogPost = () => {
       try {
         console.log('Fetching post with ID:', id);
         
-        // Find post by ID or slug from the posts array
-        const foundPost = posts.find(p => p.id === id || p.slug === id);
+        // First, try to find post in the posts array (if already loaded)
+        let foundPost = posts.find(p => p.id === id || p.slug === id);
+        
+        // If not found in posts array, fetch directly from database
+        if (!foundPost) {
+          console.log('Post not found in posts array, fetching from database...');
+          foundPost = await fetchPostFromDatabase(id);
+        }
         
         if (!foundPost || !foundPost.is_published) {
           console.log('Post not found or not published');
           setPost(null);
         } else {
-          console.log('Post fetched successfully:', foundPost);
+          console.log('Post found:', foundPost);
           setPost(foundPost);
           
           // Fetch author profile if author_id exists
           if (foundPost.author_id) {
-            try {
-              console.log('Fetching author profile for:', foundPost.author_id);
-              const { data: profile, error } = await supabase
-                .from('profiles')
-                .select('id, display_name, profile_picture, bio')
-                .eq('id', foundPost.author_id)
-                .single();
-
-              if (error) {
-                console.error('Error fetching author profile:', error);
-              } else {
-                console.log('Author profile fetched:', profile);
-                setAuthorProfile(profile);
-              }
-            } catch (profileError) {
-              console.error('Error fetching author profile:', profileError);
+            const profile = await fetchAuthorProfile(foundPost.author_id);
+            if (profile) {
+              setAuthorProfile(profile);
             }
           }
           
